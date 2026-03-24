@@ -1,0 +1,82 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* ── Custom premium dark-theme base ── */
+@layer base {
+  :root {
+    /* Minimal premium palette */
+    --color-bg: #0B0B0B;
+    --color-surface: #121212;
+    --color-surface-hover: #161616;
+    --color-border: #1F1F1F;
+    --color-border-hover: #333333;
+    
+    /* Text */
+    --color-text-primary: #FFFFFF;
+    --color-text-secondary: #A0A0A0;
+    --color-text-muted: #666666;
+    
+    /* Single Accent (Muted Gold) */
+    --color-accent: #D4AF37;
+    
+    /* Semantic (subtle) */
+    --color-danger: #D94A4A;
+    --color-warning: #D9A04A;
+    --color-success: #4AD986;
+    --color-info: #4A90D9;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--color-bg);
+    color: var(--color-text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-hover);
+  }
+}
+
+/* ── Custom Animations ── */
+@keyframes move-x {
+  0% { left: -20%; }
+  100% { left: 120%; }
+}
+@keyframes move-x-rev {
+  0% { left: 120%; }
+  100% { left: -20%; }
+}
+@keyframes move-y {
+  0% { top: -20%; }
+  100% { top: 120%; }
+}
+@keyframes move-y-rev {
+  0% { top: 120%; }
+  100% { top: -20%; }
+}
