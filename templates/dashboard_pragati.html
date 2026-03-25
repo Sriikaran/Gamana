@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pragati AI — Smart Traffic Intelligence</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #06080d;
+  --s1:        #0b0f18;
+  --s2:        #111826;
+  --s3:        #19233a;
+  --border:    #1e2d45;
+  --border2:   #243350;
+  --green:     #22c55e;
+  --red:       #ef4444;
+  --amber:     #f59e0b;
+  --cyan:      #06b6d4;
+  --purple:    #a855f7;
+  --blue:      #3b82f6;
+  --text:      #e2e8f0;
+  --muted:     #64748b;
+  --muted2:    #94a3b8;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Sora', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(ellipse 60% 40% at 15% 50%, rgba(59,130,246,0.04) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 85% 20%, rgba(168,85,247,0.04) 0%, transparent 70%);
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--s1); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+header {
+  position: relative; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px;
+  background: rgba(6,8,13,0.96);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-icon {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: linear-gradient(135deg, #3b82f6, #a855f7);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.brand-text h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
+.brand-text p  { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+.header-meta { display: flex; align-items: center; gap: 12px; }
+.meta-pill {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--s2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 4px 10px;
+  font-size: 10px; color: var(--muted2);
+}
+.meta-pill span { font-family: 'IBM Plex Mono', monospace; color: var(--text); font-weight: 500; }
+
+.state-badge {
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.8px;
+  text-transform: uppercase; border: 1px solid; transition: all 0.3s;
+}
+.state-NORMAL             { color: var(--green); border-color: rgba(34,197,94,0.4);  background: rgba(34,197,94,0.06); }
+.state-COOLDOWN           { color: var(--cyan);  border-color: rgba(6,182,212,0.4);  background: rgba(6,182,212,0.06); }
+.state-AMBULANCE_OVERRIDE { color: var(--red);   border-color: rgba(239,68,68,0.5);  background: rgba(239,68,68,0.1);
+  animation: flash-badge 0.5s step-end infinite; }
+.state-FAILSAFE           { color: var(--amber); border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.06); }
+@keyframes flash-badge { 50% { box-shadow: 0 0 10px rgba(239,68,68,0.5); } }
+
+.live-indicator { display: flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: 600; color: var(--green); letter-spacing: 1px; text-transform: uppercase; }
+.live-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%;
+  animation: pulse-dot 1.4s ease-in-out infinite; }
+@keyframes pulse-dot { 50% { opacity: 0.3; transform: scale(0.7); } }
+
+#amb-banner {
+  display: none; position: relative; z-index: 99;
+  background: rgba(239,68,68,0.9); color: #fff; text-align: center;
+  padding: 8px; font-weight: 700; font-size: 13px; letter-spacing: 1.5px;
+  animation: banner-flash 0.6s step-end infinite;
+}
+@keyframes banner-flash { 50% { background: rgba(185,28,28,0.95); } }
+
+.layout {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  grid-template-rows: auto auto auto;
+  gap: 12px; padding: 12px 16px;
+  max-width: 1600px; margin: 0 auto;
+}
+
+.card {
+  background: var(--s1); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+}
+.card-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 0;
+  font-size: 9px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 1.2px;
+}
+
+.video-section { grid-column: 1; grid-row: 1; }
+.video-inner { position: relative; background: #000; aspect-ratio: 16/9; overflow: hidden; }
+#vfeed { width: 100%; height: 100%; object-fit: contain; display: block; }
+.video-badge {
+  position: absolute; bottom: 10px; left: 10px;
+  background: rgba(6,8,13,0.85); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--muted);
+}
+
+.right-panel { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 10px; }
+
+.signal-card { padding: 14px; }
+.signal-main { text-align: center; padding: 10px 0 6px; }
+.sig-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.sig-lane-name { font-size: 26px; font-weight: 700; color: var(--green); letter-spacing: -0.5px; line-height: 1; transition: color 0.3s; }
+.sig-timer { font-family: 'IBM Plex Mono', monospace; font-size: 48px; font-weight: 500; color: var(--green); line-height: 1.1; transition: color 0.3s; }
+.sig-timer.warning { color: #f97316; }
+.sig-timer-label { font-size: 10px; color: var(--muted); }
+.sig-reason { margin-top: 8px; padding: 6px 10px; background: var(--s2); border-radius: 6px; font-size: 10px; color: var(--muted2); min-height: 34px; line-height: 1.5; border: 1px solid var(--border); }
+
+.lane-dot-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+.lane-dot-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px; background: var(--s2); border-radius: 8px; border: 1px solid var(--border); transition: border-color 0.3s, background 0.3s; }
+.lane-dot-cell.is-green { border-color: rgba(34,197,94,0.5); background: rgba(34,197,94,0.07); }
+.ldot { width: 10px; height: 10px; border-radius: 50%; transition: background 0.3s, box-shadow 0.3s; }
+.ldot.green { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse-dot 1s ease-in-out infinite; }
+.ldot.red   { background: #2a3448; }
+.ldot-label { font-size: 8px; color: var(--muted); text-align: center; line-height: 1.2; }
+
+.risk-card { padding: 14px; }
+.risk-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.risk-row:last-child { border-bottom: none; }
+.risk-name { font-size: 10px; font-weight: 500; min-width: 80px; color: var(--muted2); }
+.risk-bar-bg { flex: 1; height: 5px; border-radius: 3px; background: var(--s2); overflow: hidden; }
+.risk-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease, background 0.5s; }
+.risk-badge { font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 4px; min-width: 54px; text-align: center; transition: all 0.3s; }
+.rbadge-LOW      { background: rgba(34,197,94,0.12);  color: #22c55e; }
+.rbadge-MEDIUM   { background: rgba(245,158,11,0.12); color: #f59e0b; }
+.rbadge-HIGH     { background: rgba(239,68,68,0.12);  color: #ef4444; }
+.rbadge-CRITICAL { background: rgba(239,68,68,0.25);  color: #ff7070; animation: pulse-crit 0.7s ease-in-out infinite; }
+@keyframes pulse-crit { 50% { background: rgba(239,68,68,0.45); } }
+
+.feed-card { padding: 14px; flex: 1; }
+.feed-scroll { max-height: 200px; overflow-y: auto; }
+.feed-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.feed-item:last-child { border-bottom: none; }
+.feed-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 3px; flex-shrink: 0; }
+.fd-HIGH   { background: var(--red); }
+.fd-MEDIUM { background: var(--amber); }
+.fd-LOW    { background: var(--muted); }
+.feed-type { font-size: 11px; font-weight: 500; }
+.feed-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+.lanes-section { grid-column: 1; grid-row: 2; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.lane-card { background: var(--s1); border: 1px solid var(--border); border-radius: 12px; padding: 12px; transition: border-color 0.3s, box-shadow 0.3s; }
+.lane-card.lc-active { border-color: rgba(34,197,94,0.5); box-shadow: 0 0 16px rgba(34,197,94,0.1); }
+.lc-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.lc-name { font-size: 11px; font-weight: 600; }
+.lc-dot { width: 9px; height: 9px; border-radius: 50%; }
+.lc-dot.green { background: var(--green); animation: pulse-dot 1s ease-in-out infinite; }
+.lc-dot.red   { background: #2a3448; }
+.lc-pbar-bg { height: 5px; border-radius: 3px; background: var(--s2); margin-bottom: 8px; overflow: hidden; }
+.lc-pbar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease, background 0.5s; }
+.lc-pval { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500; margin-bottom: 6px; line-height: 1; }
+.lc-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; font-size: 10px; color: var(--muted); }
+.lcs-val { color: var(--text); font-weight: 500; }
+.lc-divider { height: 1px; background: var(--border); margin: 8px 0; }
+.trend-rising  { color: var(--red) !important; }
+.trend-falling { color: var(--green) !important; }
+.trend-stable  { color: var(--muted) !important; }
+.lc-btags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.btag { font-size: 8px; padding: 1px 5px; border-radius: 3px; background: rgba(239,68,68,0.1); color: #ff8080; font-weight: 500; }
+
+.policy-section { grid-column: 1 / 3; grid-row: 3; }
+.policy-inner { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+.policy-chart-wrap { padding: 14px; border-right: 1px solid var(--border); }
+.chart-canvas-wrap { height: 180px; position: relative; }
+.policy-causes { padding: 14px; border-right: 1px solid var(--border); }
+.cause-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.cause-row { display: flex; align-items: center; gap: 8px; }
+.cause-name { font-size: 10px; min-width: 130px; color: var(--muted2); }
+.cause-bar-bg { flex: 1; height: 5px; border-radius: 3px; background: var(--s2); overflow: hidden; }
+.cause-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+.cause-pct { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--muted); min-width: 34px; text-align: right; }
+.history-chart-wrap { padding: 14px; }
+.history-canvas-wrap { height: 180px; position: relative; }
+
+footer { position: relative; z-index: 1; text-align: center; padding: 10px; font-size: 9px; color: var(--muted); border-top: 1px solid var(--border); letter-spacing: 0.5px; }
+</style>
+</head>
+<body>
+
+<div id="amb-banner">🚑 AMBULANCE DETECTED — EMERGENCY PRIORITY OVERRIDE ACTIVE</div>
+
+<header>
+  <div class="brand">
+    <div class="brand-icon">🚦</div>
+    <div class="brand-text">
+      <h1>Pragati AI</h1>
+      <p>Behaviour-Aware Smart Traffic · Indian Cities</p>
+    </div>
+  </div>
+  <div class="header-meta">
+    <div class="live-indicator"><div class="live-dot"></div>Live</div>
+    <div class="meta-pill">FPS <span id="fps-val">--</span></div>
+    <div class="meta-pill">Frames <span id="frame-val">--</span></div>
+    <div class="meta-pill">Uptime <span id="uptime-val">--</span></div>
+    <div class="state-badge state-NORMAL" id="state-badge">Normal</div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <section class="card video-section">
+    <div class="card-hdr" style="padding:10px 14px 8px">
+      <span>Live feed</span>
+      <span style="font-size:9px;color:var(--green)">● streaming</span>
+    </div>
+    <div class="video-inner">
+      <img id="vfeed" src="/video_feed" alt="Live traffic feed">
+      <div class="video-badge" id="video-meta">Frame: -- | Vehicles: --</div>
+    </div>
+  </section>
+
+  <aside class="right-panel">
+    <div class="card signal-card">
+      <div class="card-hdr">Active signal</div>
+      <div class="signal-main">
+        <div class="sig-label">Green lane</div>
+        <div class="sig-lane-name" id="sig-lane">---</div>
+        <div class="sig-timer" id="sig-timer">--</div>
+        <div class="sig-timer-label">seconds remaining</div>
+        <div class="sig-reason" id="sig-reason">Initializing...</div>
+      </div>
+      <div class="lane-dot-row" id="lane-dot-row"></div>
+    </div>
+
+    <div class="card risk-card">
+      <div class="card-hdr" style="margin-bottom:10px">Congestion risk</div>
+      <div id="risk-rows"></div>
+    </div>
+
+    <div class="card feed-card">
+      <div class="card-hdr" style="margin-bottom:10px">Behaviour feed</div>
+      <div class="feed-scroll" id="feed-scroll">
+        <div style="color:var(--muted);font-size:10px;padding:6px 0">Waiting for events...</div>
+      </div>
+    </div>
+  </aside>
+
+  <section class="lanes-section" id="lane-cards"></section>
+
+  <section class="card policy-section">
+    <div class="policy-inner">
+      <div class="policy-chart-wrap">
+        <div class="card-hdr" style="padding:0;margin-bottom:10px">Cause breakdown</div>
+        <div class="chart-canvas-wrap"><canvas id="policy-chart"></canvas></div>
+      </div>
+      <div class="policy-causes">
+        <div class="card-hdr" style="padding:0;margin-bottom:10px">Top causes (60s)</div>
+        <div class="cause-list" id="cause-list">
+          <div style="color:var(--muted);font-size:10px">No events yet</div>
+        </div>
+      </div>
+      <div class="history-chart-wrap">
+        <div class="card-hdr" style="padding:0;margin-bottom:10px">Pressure history</div>
+        <div class="history-canvas-wrap"><canvas id="history-chart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>Pragati AI · Behaviour-Aware Smart Traffic Management · India 2024 · SDG 3 · SDG 11</footer>
+
+<script>
+// ── This version uses the single /stats endpoint (app_pragati.py) ─────────────
+
+const CAUSE_COLORS = {
+  phantom_brake:    '#ef4444', lane_cutting:     '#f97316',
+  wrong_side:       '#dc2626', startup_delay:    '#f59e0b',
+  bus_blocking:     '#eab308', pedestrian_surge: '#a855f7',
+  queue_buildup:    '#06b6d4', speed_variation:  '#64748b',
+};
+const LANE_COLORS     = ['#f59e0b','#06b6d4','#22c55e','#a855f7','#f97316','#ec4899'];
+const RISK_BAR_COLORS = { CRITICAL:'#ff5555', HIGH:'#ef4444', MEDIUM:'#f59e0b', LOW:'#22c55e' };
+
+let laneNames       = [];
+let laneColorsMap   = {};
+let pressureHistory = {};
+let inited          = false;
+
+const pCtx = document.getElementById('policy-chart').getContext('2d');
+const policyChart = new Chart(pCtx, {
+  type: 'doughnut',
+  data: { labels: [], datasets: [{ data: [], backgroundColor: [], borderWidth: 0, hoverOffset: 4 }] },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { color: '#64748b', font: { size: 9 }, boxWidth: 8, padding: 6 } } },
+    cutout: '62%', animation: { duration: 400 },
+  }
+});
+
+const hCtx = document.getElementById('history-chart').getContext('2d');
+const histChart = new Chart(hCtx, {
+  type: 'line',
+  data: { labels: Array(60).fill(''), datasets: [] },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: { duration: 0 },
+    plugins: { legend: { labels: { color: '#64748b', font: { size: 9 }, boxWidth: 8 } } },
+    scales: {
+      x: { display: false },
+      y: { min: 0, max: 100, grid: { color: 'rgba(30,45,69,0.6)' }, ticks: { color: '#64748b', font: { size: 9 } } }
+    },
+    elements: { point: { radius: 0 }, line: { tension: 0.35 } },
+  }
+});
+
+function el(id) { return document.getElementById(id); }
+
+function pColor(p) {
+  if (p > 70) return '#ef4444';
+  if (p > 45) return '#f59e0b';
+  return '#22c55e';
+}
+
+function initLanes(names) {
+  laneNames = names;
+  names.forEach((n, i) => {
+    laneColorsMap[n]   = LANE_COLORS[i % LANE_COLORS.length];
+    pressureHistory[n] = Array(60).fill(0);
+  });
+
+  el('lane-dot-row').innerHTML = names.map(n => `
+    <div class="lane-dot-cell" id="ldcell-${n}">
+      <div class="ldot red" id="ldot-${n}"></div>
+      <div class="ldot-label">${n.replace('_',' ')}</div>
+    </div>`).join('');
+
+  el('risk-rows').innerHTML = names.map(n => `
+    <div class="risk-row">
+      <span class="risk-name">${n.replace('_',' ')}</span>
+      <div class="risk-bar-bg"><div class="risk-bar-fill" id="rb-${n}" style="width:0%"></div></div>
+      <span class="risk-badge rbadge-LOW" id="rl-${n}">LOW</span>
+    </div>`).join('');
+
+  el('lane-cards').innerHTML = names.map(n => `
+    <div class="lane-card" id="lc-${n}">
+      <div class="lc-hdr">
+        <span class="lc-name">${n.replace('_',' ')}</span>
+        <div class="lc-dot red" id="lcdot-${n}"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div class="lc-pbar-bg" style="flex:1"><div class="lc-pbar-fill" id="lcbar-${n}" style="width:0%"></div></div>
+        <span class="lc-pval" id="lcpval-${n}">0</span>
+      </div>
+      <div class="lc-stats">
+        <span>Total <span class="lcs-val" id="lct-${n}">0</span></span>
+        <span>Moving <span class="lcs-val" id="lcm-${n}">0</span></span>
+        <span>Stopped <span class="lcs-val" id="lcs-${n}">0</span></span>
+        <span>Wait <span class="lcs-val" id="lcw-${n}">0s</span></span>
+        <span>Flow <span class="lcs-val" id="lcf-${n}">0/s</span></span>
+        <span>Pred <span class="lcs-val trend-stable" id="lcp-${n}">→</span></span>
+      </div>
+      <div class="lc-divider"></div>
+      <div class="lc-btags" id="lcbt-${n}"></div>
+    </div>`).join('');
+
+  histChart.data.datasets = names.map((n, i) => ({
+    label: n, data: [...pressureHistory[n]],
+    borderColor: LANE_COLORS[i % LANE_COLORS.length],
+    backgroundColor: 'transparent', borderWidth: 1.5,
+  }));
+  histChart.update();
+  inited = true;
+}
+
+function updateUI(data) {
+  if (!data || !data.signal) return;
+
+  const sig   = data.signal;
+  const lanes = data.lanes || {};
+  const names = Object.keys(lanes);
+
+  if (!inited && names.length > 0) initLanes(names);
+  if (!inited) return;
+
+  // Signal
+  const greenLane = sig.green_lane || '';
+  el('sig-lane').textContent = greenLane.replace('_',' ');
+  const rem = Math.round(sig.time_remaining || 0);
+  const te  = el('sig-timer');
+  te.textContent = rem;
+  te.className   = rem < 8 ? 'sig-timer warning' : 'sig-timer';
+  el('sig-reason').textContent = sig.reason || '';
+
+  // State badge
+  const state = sig.state || 'NORMAL';
+  const badge = el('state-badge');
+  badge.textContent = state.replace('_',' ');
+  badge.className   = `state-badge state-${state}`;
+
+  el('amb-banner').style.display = state === 'AMBULANCE_OVERRIDE' ? 'block' : 'none';
+
+  // Lane dot row
+  names.forEach(n => {
+    const g = n === greenLane;
+    const c = el(`ldcell-${n}`); if (c) c.className = `lane-dot-cell${g?' is-green':''}`;
+    const d = el(`ldot-${n}`);   if (d) d.className  = `ldot ${g?'green':'red'}`;
+  });
+
+  let totalV = 0;
+  names.forEach((n, idx) => {
+    const ld = lanes[n]; if (!ld) return;
+    totalV += ld.total || 0;
+    const g = n === greenLane;
+    const p = ld.pressure || 0;
+
+    const lc = el(`lc-${n}`); if (lc) lc.className = `lane-card${g?' lc-active':''}`;
+    const dd = el(`lcdot-${n}`); if (dd) dd.className = `lc-dot ${g?'green':'red'}`;
+    const lb = el(`lcbar-${n}`); if (lb) { lb.style.width = p+'%'; lb.style.background = pColor(p); }
+    el(`lcpval-${n}`).textContent = Math.round(p);
+    el(`lct-${n}`).textContent    = ld.total || 0;
+    el(`lcm-${n}`).textContent    = ld.moving || 0;
+    el(`lcs-${n}`).textContent    = ld.stopped || 0;
+    el(`lcw-${n}`).textContent    = Math.round(ld.wait_time || 0) + 's';
+    el(`lcf-${n}`).textContent    = (ld.flow_rate || 0).toFixed(2) + '/s';
+
+    const pred  = ld.prediction || {};
+    const trend = pred.trend || 'stable';
+    const te2   = el(`lcp-${n}`);
+    if (te2) { te2.textContent = trend==='rising'?'↑ rising':trend==='falling'?'↓ falling':'→ stable'; te2.className=`lcs-val trend-${trend}`; }
+
+    // Risk
+    const risk = ld.risk || {};
+    const rb = el(`rb-${n}`); if (rb) { rb.style.width=(risk.score||0)+'%'; rb.style.background=RISK_BAR_COLORS[risk.level]||'#22c55e'; }
+    const rl = el(`rl-${n}`); if (rl) { rl.textContent=risk.level||'LOW'; rl.className=`risk-badge rbadge-${risk.level||'LOW'}`; }
+
+    // Behaviour tags
+    const bt = el(`lcbt-${n}`);
+    if (bt) bt.innerHTML = Object.entries(ld.behaviours||{}).slice(0,3).map(
+      ([k,v])=>`<span class="btag">${k.replace(/_/g,' ')} ×${v}</span>`).join('');
+
+    // History
+    if (pressureHistory[n]) {
+      pressureHistory[n].shift(); pressureHistory[n].push(p);
+      if (histChart.data.datasets[idx]) histChart.data.datasets[idx].data = [...pressureHistory[n]];
+    }
+  });
+
+  histChart.update('none');
+  el('video-meta').textContent = `Frame: ${data.frame||'--'} | Vehicles: ${totalV}`;
+  el('fps-val').textContent    = '--';
+  el('frame-val').textContent  = data.frame || '--';
+
+  // Behaviour feed
+  const events = data.recent_behaviours || [];
+  const feedEl = el('feed-scroll');
+  if (events.length > 0) {
+    feedEl.innerHTML = [...events].reverse().slice(0,10).map(ev=>`
+      <div class="feed-item">
+        <div class="feed-dot fd-${ev.risk}"></div>
+        <div>
+          <div class="feed-type">${(ev.type||'').replace(/_/g,' ')}</div>
+          <div class="feed-meta">${ev.lane} · ${ev.detail||''} · ${ev.age_s||0}s ago</div>
+        </div>
+      </div>`).join('');
+  }
+
+  // Policy
+  const policy = data.policy_breakdown || [];
+  if (policy.length > 0) {
+    policyChart.data.labels   = policy.map(p=>(p.cause||'').replace(/_/g,' '));
+    policyChart.data.datasets[0].data            = policy.map(p=>p.pct);
+    policyChart.data.datasets[0].backgroundColor = policy.map(p=>CAUSE_COLORS[p.cause]||'#64748b');
+    policyChart.update('none');
+    const cl = el('cause-list');
+    if (cl) cl.innerHTML = policy.slice(0,7).map(p=>`
+      <div class="cause-row">
+        <span class="cause-name">${(p.cause||'').replace(/_/g,' ')}</span>
+        <div class="cause-bar-bg"><div class="cause-bar-fill" style="width:${p.pct}%;background:${CAUSE_COLORS[p.cause]||'#64748b'}"></div></div>
+        <span class="cause-pct">${p.pct}%</span>
+      </div>`).join('');
+  }
+}
+
+async function poll() {
+  try {
+    const r = await fetch('/stats');
+    updateUI(await r.json());
+  } catch(e) {}
+}
+
+setInterval(poll, 500);
+poll();
+</script>
+</body>
+</html>

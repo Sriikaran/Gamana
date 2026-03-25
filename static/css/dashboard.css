@@ -1,0 +1,546 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   dashboard.css  —  Smart Traffic AI Dashboard
+   Premium dark glassmorphism design with smooth animations
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tokens ──────────────────────────────────────────────────────────────── */
+:root {
+  --bg-base:      #080d14;
+  --bg-card:      rgba(12, 22, 38, 0.85);
+  --bg-card-border: rgba(40, 80, 140, 0.35);
+  --accent-blue:  #3b82f6;
+  --accent-cyan:  #06b6d4;
+  --accent-green: #22c55e;
+  --accent-red:   #ef4444;
+  --accent-amber: #f59e0b;
+  --accent-purple: #a855f7;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-dim:     #475569;
+
+  --lane-left:     #fbbf24;
+  --lane-lc:       #38bdf8;
+  --lane-rc:       #e879f9;
+  --lane-right:    #34d399;
+
+  --font-main: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.5),
+                 inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* ── Reset & Base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: var(--font-main);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(59,130,246,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 90%, rgba(168,85,247,0.08) 0%, transparent 55%);
+  background-attachment: fixed;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px;
+  background: rgba(8, 13, 20, 0.9);
+  border-bottom: 1px solid rgba(59,130,246,0.2);
+  backdrop-filter: blur(20px);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-left { display: flex; align-items: center; gap: 14px; }
+
+.logo-mark {
+  font-size: 32px;
+  filter: drop-shadow(0 0 12px rgba(34,197,94,0.6));
+  animation: pulse-glow 2.5s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(34,197,94,0.4)); }
+  50%       { filter: drop-shadow(0 0 18px rgba(34,197,94,0.9)); }
+}
+
+.header-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  background: linear-gradient(135deg, #60a5fa, #34d399);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-chip {
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  background: rgba(34,197,94,0.15);
+  color: var(--accent-green);
+  border: 1px solid rgba(34,197,94,0.3);
+  transition: all 0.4s ease;
+}
+
+.status-chip.emergency {
+  background: rgba(239,68,68,0.2);
+  color: var(--accent-red);
+  border-color: rgba(239,68,68,0.5);
+  animation: blink 0.6s ease infinite alternate;
+}
+
+.status-chip.failsafe {
+  background: rgba(245,158,11,0.2);
+  color: var(--accent-amber);
+  border-color: rgba(245,158,11,0.4);
+}
+
+@keyframes blink {
+  from { opacity: 1; }
+  to   { opacity: 0.4; }
+}
+
+.stat-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-sm);
+}
+
+.stat-pill .label {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.stat-pill .value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mono { font-family: var(--font-mono); }
+
+/* ── Ambulance banner ─────────────────────────────────────────────────────── */
+.amb-banner {
+  width: 100%;
+  background: linear-gradient(90deg, #b91c1c, #dc2626, #b91c1c);
+  background-size: 200% 100%;
+  animation: banner-slide 1.5s linear infinite;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-align: center;
+  padding: 10px 0;
+  font-size: 14px;
+}
+
+@keyframes banner-slide {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+.hidden { display: none !important; }
+
+/* ── Main grid ────────────────────────────────────────────────────────────── */
+.main-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  grid-template-rows: auto auto auto;
+  gap: 16px;
+  padding: 20px 24px;
+  max-width: 1700px;
+  margin: 0 auto;
+}
+
+/* ── Cards ────────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--bg-card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 48px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.4px;
+}
+
+.live-dot {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-red);
+  animation: blink 1s ease infinite alternate;
+}
+
+/* Grid placement */
+.video-card   { grid-column: 1; grid-row: 1; }
+.signal-card  { grid-column: 2; grid-row: 1; }
+.lanes-card   { grid-column: 1; grid-row: 2; }
+.chart-card   { grid-column: 2; grid-row: 2; }
+.predict-card { grid-column: 1 / -1; grid-row: 3; }
+
+/* ── Video ────────────────────────────────────────────────────────────────── */
+.video-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  min-height: 380px;
+}
+
+#video-stream {
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  display: block;
+}
+
+/* ── Signal card ─────────────────────────────────────────────────────────── */
+.signal-display {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 22px 20px 16px;
+}
+
+.signal-lights {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0,0,0,0.4);
+  border-radius: var(--radius-md);
+  padding: 14px 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.sig-light {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+  transition: background 0.4s ease, box-shadow 0.4s ease;
+}
+
+.sig-light.red.active    { background: #ef4444; box-shadow: 0 0 20px #ef4444, 0 0 40px rgba(239,68,68,0.4); }
+.sig-light.amber.active  { background: #f59e0b; box-shadow: 0 0 20px #f59e0b, 0 0 40px rgba(245,158,11,0.4); }
+.sig-light.green.active  { background: #22c55e; box-shadow: 0 0 20px #22c55e, 0 0 40px rgba(34,197,94,0.4); }
+
+.signal-info { flex: 1; }
+
+.active-lane-name {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  transition: color 0.4s;
+}
+
+.cong-badge {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+}
+.cong-badge.LOW    { background: rgba(34,197,94,0.15);  color: var(--accent-green); border: 1px solid rgba(34,197,94,0.4); }
+.cong-badge.MEDIUM { background: rgba(245,158,11,0.15); color: var(--accent-amber); border: 1px solid rgba(245,158,11,0.4); }
+.cong-badge.HIGH   { background: rgba(239,68,68,0.15);  color: var(--accent-red);   border: 1px solid rgba(239,68,68,0.4); }
+
+.timer-wrap { margin-top: 8px; }
+
+.timer-bar-bg {
+  height: 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.timer-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #15803d);
+  border-radius: 999px;
+  transition: width 0.5s linear;
+  width: 100%;
+}
+
+.timer-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+/* 4-lane signal row at bottom */
+.lane-signals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.lane-sig-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-radius: var(--radius-sm);
+  background: rgba(0,0,0,0.25);
+  transition: background 0.3s;
+}
+
+.lane-sig-item.green-lane {
+  background: rgba(34,197,94,0.12);
+  border: 1px solid rgba(34,197,94,0.3);
+}
+
+.sig-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  transition: background 0.4s ease, box-shadow 0.4s ease;
+}
+
+.sig-dot.red   { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.6); }
+.sig-dot.green { background: #22c55e; box-shadow: 0 0 10px rgba(34,197,94,0.8); animation: sig-pulse 1.2s ease-in-out infinite; }
+
+@keyframes sig-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(34,197,94,0.6); }
+  50%       { box-shadow: 0 0 18px rgba(34,197,94,1); }
+}
+
+.sig-ln-name {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* ── Lane stats grid ──────────────────────────────────────────────────────── */
+.lanes-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 16px;
+}
+
+.lane-stat-card {
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.lane-stat-card.active {
+  border-color: rgba(34,197,94,0.5);
+  box-shadow: 0 0 20px rgba(34,197,94,0.15);
+}
+
+.lsc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.lsc-name {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.lsc-trend-arrow {
+  font-size: 18px;
+  line-height: 1;
+  transition: color 0.3s;
+}
+
+.lsc-bar-wrap {
+  height: 6px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.lsc-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s ease;
+}
+
+.lsc-pressure {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.lsc-counts {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.count-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+}
+
+.lsc-types {
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.8;
+}
+
+/* ── Chart card ───────────────────────────────────────────────────────────── */
+.chart-wrap {
+  padding: 12px 16px;
+  height: 220px;
+  position: relative;
+}
+
+#hist-chart {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Prediction card ──────────────────────────────────────────────────────── */
+.predict-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 16px;
+}
+
+.predict-item {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius-md);
+  padding: 14px;
+}
+
+.predict-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.predict-now {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  margin-bottom: 4px;
+}
+
+.predict-future {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  transition: color 0.3s;
+}
+
+.predict-spike {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(239,68,68,0.2);
+  color: var(--accent-red);
+  border: 1px solid rgba(239,68,68,0.4);
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 1200px) {
+  .main-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+  .video-card, .signal-card, .lanes-card, .chart-card, .predict-card {
+    grid-column: 1; grid-row: auto;
+  }
+  .lanes-grid { grid-template-columns: repeat(2, 1fr); }
+  .predict-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .lanes-grid  { grid-template-columns: 1fr; }
+  .predict-grid { grid-template-columns: 1fr; }
+  .lane-signals { grid-template-columns: repeat(2, 1fr); }
+}

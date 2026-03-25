@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pragati AI — Smart Traffic Intelligence</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #06080d;
+  --s1:      #0b0f18;
+  --s2:      #111826;
+  --border:  #1e2d45;
+  --green:   #22c55e;
+  --red:     #ef4444;
+  --amber:   #f59e0b;
+  --cyan:    #06b6d4;
+  --purple:  #a855f7;
+  --blue:    #3b82f6;
+  --text:    #e2e8f0;
+  --muted:   #64748b;
+  --muted2:  #94a3b8;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--text);
+  font-family: 'Sora', sans-serif; font-size: 13px; overflow-x: hidden; }
+
+body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse 60% 40% at 15% 50%, rgba(59,130,246,0.04) 0%, transparent 70%),
+              radial-gradient(ellipse 50% 40% at 85% 20%, rgba(168,85,247,0.04) 0%, transparent 70%); }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--s1); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Header ── */
+header {
+  position: relative; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px;
+  background: rgba(6,8,13,0.96); border-bottom: 1px solid var(--border);
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-icon { width: 34px; height: 34px; border-radius: 8px;
+  background: linear-gradient(135deg, #3b82f6, #a855f7);
+  display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.brand h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
+.brand p  { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+.header-right { display: flex; align-items: center; gap: 10px; }
+.meta-pill { display: flex; align-items: center; gap: 5px; background: var(--s2);
+  border: 1px solid var(--border); border-radius: 20px; padding: 4px 10px;
+  font-size: 10px; color: var(--muted2); }
+.meta-pill span { font-family: 'IBM Plex Mono', monospace; color: var(--text); font-weight: 500; }
+
+.state-badge { padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.8px; text-transform: uppercase; border: 1px solid; transition: all 0.3s; }
+.state-NORMAL             { color: var(--green); border-color: rgba(34,197,94,0.4);  background: rgba(34,197,94,0.06); }
+.state-COOLDOWN           { color: var(--cyan);  border-color: rgba(6,182,212,0.4);  background: rgba(6,182,212,0.06); }
+.state-AMBULANCE_OVERRIDE { color: var(--red);   border-color: rgba(239,68,68,0.5);  background: rgba(239,68,68,0.1);
+  animation: flash-badge 0.5s step-end infinite; }
+.state-FAILSAFE           { color: var(--amber); border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.06); }
+@keyframes flash-badge { 50% { box-shadow: 0 0 10px rgba(239,68,68,0.5); } }
+
+.live-dot-wrap { display: flex; align-items: center; gap: 5px; font-size: 10px;
+  font-weight: 600; color: var(--green); letter-spacing: 1px; text-transform: uppercase; }
+.live-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%;
+  animation: blink 1.4s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: 0.3; transform: scale(0.7); } }
+
+/* ── Upload bar ── */
+.upload-bar {
+  position: relative; z-index: 99;
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 20px;
+  background: var(--s1); border-bottom: 1px solid var(--border);
+}
+.upload-bar label { font-size: 10px; color: var(--muted2); text-transform: uppercase;
+  letter-spacing: 0.8px; white-space: nowrap; }
+.upload-input { display: none; }
+.upload-btn {
+  padding: 5px 14px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--s2); color: var(--text); font-size: 11px; cursor: pointer;
+  font-family: 'Sora', sans-serif; transition: border-color 0.2s;
+}
+.upload-btn:hover { border-color: var(--blue); }
+.upload-btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600; }
+.upload-status { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+.lane-select { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--s2); color: var(--text); font-size: 11px; font-family: 'Sora', sans-serif; cursor: pointer; }
+
+/* ── Ambulance banner ── */
+#amb-banner { display: none; position: relative; z-index: 98;
+  background: rgba(239,68,68,0.9); color: #fff; text-align: center;
+  padding: 8px; font-weight: 700; font-size: 13px; letter-spacing: 1.5px;
+  animation: banner-flash 0.6s step-end infinite; }
+@keyframes banner-flash { 50% { background: rgba(185,28,28,0.95); } }
+
+/* ── Main layout ── */
+.layout {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 330px;
+  grid-template-rows: auto auto auto;
+  gap: 10px; padding: 10px 14px;
+  max-width: 1600px; margin: 0 auto;
+}
+
+/* ── Cards ── */
+.card { background: var(--s1); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.card-hdr { font-size: 9px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 1.2px; padding: 10px 14px 0; }
+
+/* ── Video ── */
+.video-section { grid-column: 1; grid-row: 1; }
+.video-inner { position: relative; background: #000; aspect-ratio: 16/9; overflow: hidden; }
+#vfeed { width: 100%; height: 100%; object-fit: contain; display: block; }
+.video-badge { position: absolute; bottom: 10px; left: 10px;
+  background: rgba(6,8,13,0.85); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--muted); }
+
+/* ── Right panel ── */
+.right-panel { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 10px; }
+
+/* Signal card */
+.signal-card { padding: 14px; }
+.signal-main { text-align: center; padding: 8px 0 6px; }
+.sig-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.sig-lane-name { font-size: 24px; font-weight: 700; color: var(--green); letter-spacing: -0.5px; line-height: 1; }
+.sig-timer { font-family: 'IBM Plex Mono', monospace; font-size: 44px; font-weight: 500;
+  color: var(--green); line-height: 1.1; transition: color 0.3s; }
+.sig-timer.warning { color: #f97316; }
+.sig-timer-label { font-size: 10px; color: var(--muted); }
+.sig-reason { margin-top: 8px; padding: 6px 10px; background: var(--s2); border-radius: 6px;
+  font-size: 10px; color: var(--muted2); min-height: 32px; line-height: 1.5; border: 1px solid var(--border); }
+
+/* Lane dot row */
+.lane-dot-row { display: grid; gap: 6px; margin-top: 10px; }
+.lane-dot-cell { display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 6px 4px; background: var(--s2); border-radius: 8px;
+  border: 1px solid var(--border); transition: border-color 0.3s, background 0.3s; }
+.lane-dot-cell.is-green { border-color: rgba(34,197,94,0.5); background: rgba(34,197,94,0.07); }
+.ldot { width: 10px; height: 10px; border-radius: 50%; transition: background 0.3s, box-shadow 0.3s; }
+.ldot.green { background: var(--green); box-shadow: 0 0 8px var(--green); animation: blink 1s ease-in-out infinite; }
+.ldot.red   { background: #2a3448; }
+.ldot-label { font-size: 8px; color: var(--muted); text-align: center; line-height: 1.2; }
+
+/* Risk card */
+.risk-card { padding: 14px; }
+.risk-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.risk-row:last-child { border-bottom: none; }
+.risk-name { font-size: 10px; font-weight: 500; min-width: 75px; color: var(--muted2); }
+.risk-bar-bg { flex: 1; height: 5px; border-radius: 3px; background: var(--s2); overflow: hidden; }
+.risk-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease, background 0.5s; }
+.risk-badge { font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 4px; min-width: 52px; text-align: center; }
+.rbadge-LOW      { background: rgba(34,197,94,0.12);  color: #22c55e; }
+.rbadge-MEDIUM   { background: rgba(245,158,11,0.12); color: #f59e0b; }
+.rbadge-HIGH     { background: rgba(239,68,68,0.12);  color: #ef4444; }
+.rbadge-CRITICAL { background: rgba(239,68,68,0.25);  color: #ff7070; animation: pulse-crit 0.7s ease-in-out infinite; }
+@keyframes pulse-crit { 50% { background: rgba(239,68,68,0.45); } }
+
+/* Feed card */
+.feed-card { padding: 14px; flex: 1; }
+.feed-scroll { max-height: 180px; overflow-y: auto; }
+.feed-item { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.feed-item:last-child { border-bottom: none; }
+.feed-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 3px; flex-shrink: 0; }
+.fd-HIGH   { background: var(--red); }
+.fd-MEDIUM { background: var(--amber); }
+.fd-LOW    { background: var(--muted); }
+.feed-type { font-size: 11px; font-weight: 500; }
+.feed-meta { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+/* ── Lane cards ── */
+.lanes-section { grid-column: 1; grid-row: 2; display: grid; gap: 10px; }
+.lane-card { background: var(--s1); border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+  transition: border-color 0.3s, box-shadow 0.3s; }
+.lane-card.lc-active { border-color: rgba(34,197,94,0.5); box-shadow: 0 0 16px rgba(34,197,94,0.1); }
+.lc-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.lc-name { font-size: 11px; font-weight: 600; }
+.lc-dot { width: 9px; height: 9px; border-radius: 50%; }
+.lc-dot.green { background: var(--green); animation: blink 1s ease-in-out infinite; }
+.lc-dot.red   { background: #2a3448; }
+.lc-pbar-bg { height: 5px; border-radius: 3px; background: var(--s2); margin-bottom: 8px; overflow: hidden; }
+.lc-pbar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease, background 0.5s; }
+.lc-pval { font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 500; margin-bottom: 5px; }
+.lc-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; font-size: 10px; color: var(--muted); }
+.lcs-val { color: var(--text); font-weight: 500; }
+.lc-divider { height: 1px; background: var(--border); margin: 6px 0; }
+.trend-rising  { color: var(--red)   !important; }
+.trend-falling { color: var(--green) !important; }
+.trend-stable  { color: var(--muted) !important; }
+.lc-btags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.btag { font-size: 8px; padding: 1px 5px; border-radius: 3px;
+  background: rgba(239,68,68,0.1); color: #ff8080; font-weight: 500; }
+
+/* ── Policy section ── */
+.policy-section { grid-column: 1 / 3; grid-row: 3; }
+.policy-inner { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+.policy-chart-wrap  { padding: 14px; border-right: 1px solid var(--border); }
+.policy-causes      { padding: 14px; border-right: 1px solid var(--border); }
+.history-chart-wrap { padding: 14px; }
+.canvas-wrap { height: 160px; position: relative; }
+.cause-list { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
+.cause-row { display: flex; align-items: center; gap: 8px; }
+.cause-name { font-size: 10px; min-width: 120px; color: var(--muted2); }
+.cause-bar-bg { flex: 1; height: 5px; border-radius: 3px; background: var(--s2); overflow: hidden; }
+.cause-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+.cause-pct { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--muted); min-width: 32px; text-align: right; }
+
+footer { position: relative; z-index: 1; text-align: center; padding: 10px;
+  font-size: 9px; color: var(--muted); border-top: 1px solid var(--border); letter-spacing: 0.5px; }
+</style>
+</head>
+<body>
+
+<div id="amb-banner">🚑 AMBULANCE DETECTED — EMERGENCY PRIORITY OVERRIDE ACTIVE</div>
+
+<!-- Header -->
+<header>
+  <div class="brand">
+    <div class="brand-icon">🚦</div>
+    <div>
+      <h1>Pragati AI</h1>
+      <p>Behaviour-Aware Smart Traffic · Indian Cities</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-dot-wrap"><div class="live-dot"></div>Live</div>
+    <div class="meta-pill">FPS <span id="fps-val">--</span></div>
+    <div class="meta-pill">Frames <span id="frame-val">--</span></div>
+    <div class="meta-pill">Uptime <span id="uptime-val">--</span></div>
+    <div class="state-badge state-NORMAL" id="state-badge">Normal</div>
+  </div>
+</header>
+
+<!-- Upload bar -->
+<div class="upload-bar">
+  <label>Upload video</label>
+  <input type="file" id="upload-input" class="upload-input" accept="video/*">
+  <button class="upload-btn" onclick="document.getElementById('upload-input').click()">Choose file</button>
+  <button class="upload-btn primary" id="upload-btn" onclick="uploadVideo()">Analyze</button>
+  <span id="upload-status" class="upload-status">No file selected</span>
+
+  <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
+
+  <label>Lanes</label>
+  <select class="lane-select" id="lane-select" onchange="changeLanes(this.value)">
+    <option value="2">2 lanes</option>
+    <option value="3">3 lanes</option>
+    <option value="4" selected>4 lanes</option>
+  </select>
+
+  <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
+
+  <label>Sample</label>
+  <select class="lane-select" id="sample-select" onchange="loadSample(this.value)">
+    <option value="">-- pick sample --</option>
+  </select>
+</div>
+
+<div class="layout">
+
+  <!-- Video -->
+  <section class="card video-section">
+    <div class="card-hdr" style="padding:10px 14px 8px">
+      <span>Live feed</span>
+      <span style="font-size:9px;color:var(--green)" id="src-label">● streaming</span>
+    </div>
+    <div class="video-inner">
+      <img id="vfeed" src="/video_feed" alt="Live traffic feed">
+      <div class="video-badge" id="video-meta">Frame: -- | Vehicles: --</div>
+    </div>
+  </section>
+
+  <!-- Right panel -->
+  <aside class="right-panel">
+    <div class="card signal-card">
+      <div class="card-hdr">Active signal</div>
+      <div class="signal-main">
+        <div class="sig-label">Green lane</div>
+        <div class="sig-lane-name" id="sig-lane">---</div>
+        <div class="sig-timer" id="sig-timer">--</div>
+        <div class="sig-timer-label">seconds remaining</div>
+        <div class="sig-reason" id="sig-reason">Initializing...</div>
+      </div>
+      <div class="lane-dot-row" id="lane-dot-row" style="grid-template-columns: repeat(4,1fr)"></div>
+    </div>
+
+    <div class="card risk-card">
+      <div class="card-hdr" style="margin-bottom:10px">Congestion risk</div>
+      <div id="risk-rows"></div>
+    </div>
+
+    <div class="card feed-card">
+      <div class="card-hdr" style="margin-bottom:10px">Behaviour feed</div>
+      <div class="feed-scroll" id="feed-scroll">
+        <div style="color:var(--muted);font-size:10px;padding:6px 0">Waiting for events...</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Lane cards -->
+  <section class="lanes-section" id="lane-cards" style="grid-template-columns:repeat(4,1fr)"></section>
+
+  <!-- Policy section -->
+  <section class="card policy-section">
+    <div class="policy-inner">
+      <div class="policy-chart-wrap">
+        <div class="card-hdr" style="padding:0;margin-bottom:10px">Cause breakdown</div>
+        <div class="canvas-wrap"><canvas id="policy-chart"></canvas></div>
+      </div>
+      <div class="policy-causes">
+        <div class="card-hdr" style="padding:0;margin-bottom:10px">Top causes (60s)</div>
+        <div class="cause-list" id="cause-list">
+          <div style="color:var(--muted);font-size:10px">No events yet</div>
+        </div>
+      </div>
+      <div class="history-chart-wrap">
+        <div class="card-hdr" style="padding:0;margin-bottom:10px">Pressure history</div>
+        <div class="canvas-wrap"><canvas id="history-chart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>Pragati AI · Behaviour-Aware Smart Traffic Management · India 2024 · SDG 3 · SDG 11 · SDG 13</footer>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────
+const CAUSE_COLORS = {
+  phantom_brake:    '#ef4444', lane_cutting:     '#f97316',
+  wrong_side:       '#dc2626', startup_delay:    '#f59e0b',
+  bus_blocking:     '#eab308', pedestrian_surge: '#a855f7',
+  queue_buildup:    '#06b6d4', speed_variation:  '#64748b',
+};
+const LANE_PALETTE   = ['#f59e0b','#06b6d4','#22c55e','#a855f7','#f97316','#ec4899'];
+const RISK_COLORS    = { CRITICAL:'#ff5555', HIGH:'#ef4444', MEDIUM:'#f59e0b', LOW:'#22c55e' };
+
+// ── State ──────────────────────────────────────────────────────────────────
+let laneNames       = [];
+let pressureHistory = {};
+let inited          = false;
+
+// ── Charts ─────────────────────────────────────────────────────────────────
+const policyChart = new Chart(
+  document.getElementById('policy-chart').getContext('2d'), {
+  type: 'doughnut',
+  data: { labels: [], datasets: [{ data: [], backgroundColor: [], borderWidth: 0, hoverOffset: 4 }] },
+  options: { responsive: true, maintainAspectRatio: false, cutout: '62%', animation: { duration: 400 },
+    plugins: { legend: { position: 'bottom', labels: { color: '#64748b', font: { size: 9 }, boxWidth: 8, padding: 6 } } } }
+});
+
+const histChart = new Chart(
+  document.getElementById('history-chart').getContext('2d'), {
+  type: 'line',
+  data: { labels: Array(60).fill(''), datasets: [] },
+  options: { responsive: true, maintainAspectRatio: false, animation: { duration: 0 },
+    plugins: { legend: { labels: { color: '#64748b', font: { size: 9 }, boxWidth: 8 } } },
+    scales: { x: { display: false },
+      y: { min: 0, max: 100, grid: { color: 'rgba(30,45,69,0.6)' }, ticks: { color: '#64748b', font: { size: 9 } } } },
+    elements: { point: { radius: 0 }, line: { tension: 0.35 } } }
+});
+
+// ── Init lanes ─────────────────────────────────────────────────────────────
+function initLanes(names) {
+  if (JSON.stringify(names) === JSON.stringify(laneNames) && inited) return;
+  laneNames = names;
+  const N = names.length;
+
+  names.forEach((n, i) => { pressureHistory[n] = Array(60).fill(0); });
+
+  // Lane dot row
+  const dotRow = document.getElementById('lane-dot-row');
+  dotRow.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+  dotRow.innerHTML = names.map(n => `
+    <div class="lane-dot-cell" id="ldcell-${n}">
+      <div class="ldot red" id="ldot-${n}"></div>
+      <div class="ldot-label">${n.replace(/_/g,' ')}</div>
+    </div>`).join('');
+
+  // Risk rows
+  document.getElementById('risk-rows').innerHTML = names.map(n => `
+    <div class="risk-row">
+      <span class="risk-name">${n.replace(/_/g,' ')}</span>
+      <div class="risk-bar-bg"><div class="risk-bar-fill" id="rb-${n}" style="width:0%"></div></div>
+      <span class="risk-badge rbadge-LOW" id="rl-${n}">LOW</span>
+    </div>`).join('');
+
+  // Lane cards grid
+  const lc = document.getElementById('lane-cards');
+  lc.style.gridTemplateColumns = N <= 2 ? 'repeat(2,1fr)' : N === 3 ? 'repeat(3,1fr)' : 'repeat(4,1fr)';
+  lc.innerHTML = names.map(n => `
+    <div class="lane-card" id="lc-${n}">
+      <div class="lc-hdr">
+        <span class="lc-name">${n.replace(/_/g,' ')}</span>
+        <div class="lc-dot red" id="lcdot-${n}"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div class="lc-pbar-bg" style="flex:1"><div class="lc-pbar-fill" id="lcbar-${n}" style="width:0%"></div></div>
+        <span class="lc-pval" id="lcpval-${n}">0</span>
+      </div>
+      <div class="lc-stats">
+        <span>Total <span class="lcs-val" id="lct-${n}">0</span></span>
+        <span>Moving <span class="lcs-val" id="lcm-${n}">0</span></span>
+        <span>Stopped <span class="lcs-val" id="lcs-${n}">0</span></span>
+        <span>Wait <span class="lcs-val" id="lcw-${n}">0s</span></span>
+        <span>Flow <span class="lcs-val" id="lcf-${n}">0/s</span></span>
+        <span>Pred <span class="lcs-val trend-stable" id="lcp-${n}">→</span></span>
+      </div>
+      <div class="lc-divider"></div>
+      <div class="lc-btags" id="lcbt-${n}"></div>
+    </div>`).join('');
+
+  // History chart datasets
+  histChart.data.datasets = names.map((n, i) => ({
+    label: n, data: [...pressureHistory[n]],
+    borderColor: LANE_PALETTE[i % LANE_PALETTE.length],
+    backgroundColor: 'transparent', borderWidth: 1.5,
+  }));
+  histChart.update();
+  inited = true;
+}
+
+function el(id) { return document.getElementById(id); }
+function pColor(p) { return p > 70 ? '#ef4444' : p > 45 ? '#f59e0b' : '#22c55e'; }
+
+// ── Main UI update ──────────────────────────────────────────────────────────
+function updateUI(status, lanes, signals, behav) {
+  // Header
+  el('fps-val').textContent   = status.fps || '--';
+  el('frame-val').textContent = status.frame_count || '--';
+  const up = status.uptime_s || 0;
+  el('uptime-val').textContent = `${Math.floor(up/60)}m${(up%60).toFixed(0)}s`;
+
+  const state = signals.state || 'NORMAL';
+  const badge = el('state-badge');
+  badge.textContent = state.replace(/_/g, ' ');
+  badge.className   = `state-badge state-${state}`;
+  el('amb-banner').style.display = state === 'AMBULANCE_OVERRIDE' ? 'block' : 'none';
+
+  // Signal panel
+  const greenLane = signals.active_lane || '';
+  el('sig-lane').textContent = greenLane.replace(/_/g, ' ');
+  const rem = Math.round(signals.time_remaining || 0);
+  const te  = el('sig-timer');
+  te.textContent = rem;
+  te.className   = rem < 8 ? 'sig-timer warning' : 'sig-timer';
+
+  // Lanes from status (dynamic count)
+  const laneData = lanes.lanes || {};
+  const names    = Object.keys(laneData);
+  if (names.length > 0) initLanes(names);
+  if (!inited) return;
+
+  // Lane dot row
+  laneNames.forEach(n => {
+    const g = n === greenLane;
+    const c = el(`ldcell-${n}`); if (c) c.className = `lane-dot-cell${g?' is-green':''}`;
+    const d = el(`ldot-${n}`);   if (d) d.className  = `ldot ${g?'green':'red'}`;
+  });
+
+  let totalV = 0;
+  laneNames.forEach((n, idx) => {
+    const ld = laneData[n]; if (!ld) return;
+    totalV += ld.total || 0;
+    const g = n === greenLane;
+    const p = ld.pressure || 0;
+
+    const lcard = el(`lc-${n}`); if (lcard) lcard.className = `lane-card${g?' lc-active':''}`;
+    const ldot  = el(`lcdot-${n}`); if (ldot) ldot.className = `lc-dot ${g?'green':'red'}`;
+    const lb    = el(`lcbar-${n}`); if (lb) { lb.style.width = p+'%'; lb.style.background = pColor(p); }
+    el(`lcpval-${n}`).textContent = Math.round(p);
+    el(`lct-${n}`).textContent    = ld.total   || 0;
+    el(`lcm-${n}`).textContent    = ld.moving  || 0;
+    el(`lcs-${n}`).textContent    = ld.stopped || 0;
+    el(`lcw-${n}`).textContent    = Math.round(ld.wait_time || 0) + 's';
+    el(`lcf-${n}`).textContent    = (ld.flow_rate || 0).toFixed(2) + '/s';
+
+    const trend = ld.trend || (lanes.trends || {})[n] || 'stable';
+    const te2   = el(`lcp-${n}`);
+    if (te2) { te2.textContent = trend==='rising'?'↑ rising':trend==='falling'?'↓ falling':'→ stable'; te2.className=`lcs-val trend-${trend}`; }
+
+    // Risk
+    const risk = (behav.risks || {})[n] || {};
+    const rb = el(`rb-${n}`); if (rb) { rb.style.width=(risk.score||0)+'%'; rb.style.background=RISK_COLORS[risk.level]||'#22c55e'; }
+    const rl = el(`rl-${n}`); if (rl) { rl.textContent=risk.level||'LOW'; rl.className=`risk-badge rbadge-${risk.level||'LOW'}`; }
+
+    // Behaviour tags
+    const bt = el(`lcbt-${n}`);
+    if (bt) bt.innerHTML = Object.entries(ld.behaviours||{}).slice(0,3).map(
+      ([k,v])=>`<span class="btag">${k.replace(/_/g,' ')} ×${v}</span>`).join('');
+
+    // History
+    if (pressureHistory[n]) {
+      pressureHistory[n].shift(); pressureHistory[n].push(p);
+      if (histChart.data.datasets[idx]) histChart.data.datasets[idx].data = [...pressureHistory[n]];
+    }
+  });
+
+  histChart.update('none');
+  el('video-meta').textContent = `Frame: ${status.frame_count||'--'} | Vehicles: ${totalV}`;
+
+  // Behaviour feed (from /api/behaviours)
+  const events = behav.behaviours || [];
+  const feedEl = el('feed-scroll');
+  if (events.length > 0) {
+    feedEl.innerHTML = [...events].reverse().slice(0,10).map(ev=>`
+      <div class="feed-item">
+        <div class="feed-dot fd-${ev.risk || 'LOW'}"></div>
+        <div>
+          <div class="feed-type">${(ev.type||'').replace(/_/g,' ')}</div>
+          <div class="feed-meta">${(ev.lane||'').replace(/_/g,' ')} · ${ev.detail||''} · ${ev.age_s!=null?ev.age_s:0}s ago</div>
+        </div>
+      </div>`).join('');
+  } else {
+    feedEl.innerHTML = '<div style="color:var(--muted);font-size:10px;padding:6px 0">Waiting for events...</div>';
+  }
+
+  // Policy pie + cause list (policy_breakdown from /api/behaviours)
+  const policy = behav.policy_breakdown || [];
+  if (policy.length > 0) {
+    policyChart.data.labels   = policy.map(p=>(p.cause||'').replace(/_/g,' '));
+    policyChart.data.datasets[0].data            = policy.map(p=>p.pct);
+    policyChart.data.datasets[0].backgroundColor = policy.map(p=>CAUSE_COLORS[p.cause]||'#64748b');
+    policyChart.update('none');
+    const cl = el('cause-list');
+    if (cl) cl.innerHTML = policy.slice(0,7).map(p=>`
+      <div class="cause-row">
+        <span class="cause-name">${(p.cause||'').replace(/_/g,' ')}</span>
+        <div class="cause-bar-bg"><div class="cause-bar-fill" style="width:${p.pct}%;background:${CAUSE_COLORS[p.cause]||'#64748b'}"></div></div>
+        <span class="cause-pct">${p.pct}%</span>
+      </div>`).join('');
+  } else {
+    policyChart.data.labels = [];
+    policyChart.data.datasets[0].data = [];
+    policyChart.data.datasets[0].backgroundColor = [];
+    policyChart.update('none');
+    const cl = el('cause-list');
+    if (cl) cl.innerHTML = '<div style="color:var(--muted);font-size:10px">No behaviour events in window</div>';
+  }
+}
+
+// ── Video upload ────────────────────────────────────────────────────────────
+document.getElementById('upload-input').addEventListener('change', function() {
+  const name = this.files[0]?.name || 'No file';
+  el('upload-status').textContent = name;
+});
+
+async function uploadVideo() {
+  const fileInput = el('upload-input');
+  if (!fileInput.files.length) {
+    el('upload-status').textContent = 'Please select a file first';
+    return;
+  }
+  const file     = fileInput.files[0];
+  const formData = new FormData();
+  formData.append('video', file);
+
+  el('upload-status').textContent = 'Uploading...';
+  el('upload-btn').disabled = true;
+
+  try {
+    const res  = await fetch('/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.ok) {
+      el('upload-status').textContent = `Analyzing: ${data.filename}`;
+      el('src-label').textContent = `● ${data.filename}`;
+      inited = false; // reset lane cards for new video
+    } else {
+      el('upload-status').textContent = `Error: ${data.error}`;
+    }
+  } catch(e) {
+    el('upload-status').textContent = 'Upload failed — server error';
+  }
+  el('upload-btn').disabled = false;
+}
+
+// ── Lane count change ───────────────────────────────────────────────────────
+async function changeLanes(count) {
+  try {
+    const res  = await fetch('/api/set_lanes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count: parseInt(count) }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      inited = false; // will re-init on next poll
+    }
+  } catch(e) {}
+}
+
+// ── Load sample video ───────────────────────────────────────────────────────
+async function loadSample(filename) {
+  if (!filename) return;
+  try {
+    const res = await fetch('/upload', {
+      method: 'POST',
+      body: (() => { const f = new FormData(); f.append('sample', filename); return f; })(),
+    });
+  } catch(e) {}
+  el('upload-status').textContent = `Sample: ${filename}`;
+  el('src-label').textContent = `● ${filename}`;
+  inited = false;
+}
+
+// Load sample video list on startup
+async function loadSampleList() {
+  try {
+    const res     = await fetch('/api/sample_videos');
+    const data    = await res.json();
+    const select  = el('sample-select');
+    (data.samples || []).forEach(s => {
+      const opt   = document.createElement('option');
+      opt.value   = s;
+      opt.textContent = s;
+      select.appendChild(opt);
+    });
+  } catch(e) {}
+}
+
+// ── Polling ─────────────────────────────────────────────────────────────────
+async function poll() {
+  try {
+    const [statusRes, lanesRes, signalsRes, behavRes] = await Promise.all([
+      fetch('/api/status'),
+      fetch('/api/lanes'),
+      fetch('/api/signals'),
+      fetch('/api/behaviours'),
+    ]);
+    const status  = await statusRes.json();
+    const lanes   = await lanesRes.json();
+    const signals = await signalsRes.json();
+    const behav   = await behavRes.json();
+    updateUI(status, lanes, signals, behav);
+  } catch(e) {}
+}
+
+setInterval(poll, 500);
+loadSampleList();
+poll();
+</script>
+</body>
+</html>

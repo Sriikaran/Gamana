@@ -1,0 +1,11 @@
+{
+  "include": ["."],
+  "exclude": ["venv", "__pycache__", ".git"],
+  "venvPath": ".",
+  "venv": "venv",
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Windows",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none"
+}
