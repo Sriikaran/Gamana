@@ -39,9 +39,7 @@ class CongestionPredictor:
     FPS                    = float(getattr(config, 'TARGET_FPS', 25))
 
     def __init__(self) -> None:
-        self._history: Dict[str, deque] = {
-            ln: deque(maxlen=self.HISTORY_LEN) for ln in config.LANE_NAMES
-        }
+        self._history: Dict[str, deque] = {}
         # Cached regression results, refreshed every REGRESSION_EVERY_N frames
         self._predictions: Dict[str, dict] = {}
         self._frame_counter: int = 0
@@ -58,10 +56,11 @@ class CongestionPredictor:
 
         predicted: Dict[str, float] = {}
 
-        for ln in config.LANE_NAMES:
-            cur_pressure = (
-                lane_stats[ln].pressure if ln in lane_stats else 0.0
-            )
+        for ln in lane_stats:
+            if ln not in self._history:
+                self._history[ln] = deque(maxlen=self.HISTORY_LEN)
+
+            cur_pressure = lane_stats[ln].pressure
             self._history[ln].append(float(cur_pressure))
 
             if run_regression or ln not in self._predictions:

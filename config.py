@@ -16,40 +16,21 @@ MJPEG_QUALITY = 75
 # Keeps output near normal video speed on heavier models/videos.
 REALTIME_MODE = True
 INFER_SCALE = 0.75            # YOLO inference scale (0.5-1.0)
-DETECT_EVERY_N_FRAMES = 2     # run detector every N frames, reuse tracks between
+DETECT_EVERY_N_FRAMES = 1     # run detector every N frames, reuse tracks between
 MAX_SKIPPED_FRAMES = 4        # adaptive skip when processing lags source FPS
 
 # ─── LANE CONFIGURATION ───────────────────────────────────────────────────────
-# Fixed 4-lane intersection (LEFT, LEFT_CENTER, RIGHT_CENTER, RIGHT)
+# Fixed 4-lane intersection defaults
 LANE_COUNT = 4
-
-# Lane names auto-generated based on LANE_COUNT:
-#   2 lanes → ["LEFT", "RIGHT"]
-#   3 lanes → ["LEFT", "CENTER", "RIGHT"]
-#   4 lanes → ["LEFT", "LEFT_CENTER", "RIGHT_CENTER", "RIGHT"]
-def get_lane_names(count: int) -> list:
-    if count == 2:
-        return ["LEFT", "RIGHT"]
-    elif count == 3:
-        return ["LEFT", "CENTER", "RIGHT"]
-    elif count == 4:
-        return ["LEFT", "LEFT_CENTER", "RIGHT_CENTER", "RIGHT"]
-    else:
-        return [f"LANE_{i+1}" for i in range(count)]
-
-LANE_NAMES = get_lane_names(LANE_COUNT)
+LANE_NAMES = [f"LANE_{i+1}" for i in range(LANE_COUNT)]
 
 LANE_COLORS_MAP = {
-    "LEFT":         (255, 200,  50),
-    "LEFT_CENTER":  ( 50, 200, 255),
-    "CENTER":       (100, 255, 100),
-    "RIGHT_CENTER": (200, 255,  50),
-    "RIGHT":        (255,  50, 200),
     "LANE_1":       (255, 200,  50),
     "LANE_2":       ( 50, 200, 255),
     "LANE_3":       (200, 255,  50),
     "LANE_4":       (255,  50, 200),
     "LANE_5":       (255, 150, 100),
+    "LANE_6":       (100, 255, 100),
 }
 
 # ─── MODEL ────────────────────────────────────────────────────────────────────
@@ -158,6 +139,50 @@ GREEN_MED_TIME   = GREEN_TIME_MEDIUM
 GREEN_HIGH_TIME  = GREEN_TIME_HIGH
 SWITCH_THRESHOLD = SWITCH_DELTA_THRESH
 FAILSAFE_GREEN_TIME = FAILSAFE_GREEN_SECONDS
+
+# ─── PHASE 2: ADAPTIVE SIGNAL CONTROL ─────────────────────────────────────────
+MIN_SHARE = 0.1
+MAX_SHARE = 0.7
+MAX_WAIT_TIME = 120.0
+SWITCH_DELTA = 15.0
+
+
+# ─── PHASE 1: CORE PRESSURE MODEL ─────────────────────────────────────────────
+
+# Sigmoid Normalization ( S(x) = 1 / (1 + exp(-k*(x - x0))) )
+SIGMOID_K  = 1.0
+SIGMOID_X0 = 0.5
+
+# Disturbance Components
+PB_A1 = 0.6  # Weight for Δv in Phantom Braking
+PB_A2 = 0.4  # Weight for σ_v in Phantom Braking
+PB_MAX_DELTA_V    = 30.0   # max expected speed drop (px/frame) for normalization
+PB_VAR_C          = 50.0   # Stabilizing constant for variance normalization
+PB_DV_THRESHOLD   = 0.05   # min normalized Δv to activate PB (below → 0)
+PB_MAX_SIGMOID_IN = 4.0    # clamp sigmoid input to prevent saturation
+
+SG_OSC_MIN_THRESHOLD = 0.20   # min normalized oscillation to activate SG
+SG_MAX_SIGMOID_IN    = 4.0    # clamp sigmoid input to prevent saturation
+
+QG_B1 = 0.5  # Weight for Q in Queue Growth
+QG_B2 = 0.5  # Weight for Δq in Queue Growth
+
+# Disturbance Score component weights (Must sum to 1.0)
+W_PB = 0.4
+W_QG = 0.3
+W_SG = 0.2
+W_IM = 0.1
+
+# Core Pressure Model weights (Must sum to 1.0)
+ALPHA_RHO = 0.5
+BETA_Q    = 0.3
+GAMMA_D   = 0.2
+
+# Normalization constants
+LANE_CAPACITY = 30.0
+
+# Adaptive Smoothing
+P_SMOOTHING = 0.8  # Exponential moving average factor
 
 # predictor.py
 HISTORY_LEN          = 60

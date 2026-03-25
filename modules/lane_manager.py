@@ -42,6 +42,7 @@ class LaneManager:
         self._polygons: dict[str, np.ndarray] = {}
         self._areas: dict[str, float] = {}
         self._lane_centroid_x: dict[str, float] = {}
+        self._lane_centroid_y: dict[str, float] = {}
 
         self._build_polygons()
 
@@ -87,8 +88,8 @@ class LaneManager:
 
         width = int(data.get("width", -1))
         height = int(data.get("height", -1))
-        if width != int(self.frame_w) or height != int(self.frame_h):
-            return False
+        scale_x = self.frame_w / width if width > 0 else 1.0
+        scale_y = self.frame_h / height if height > 0 else 1.0
 
         lanes = data.get("lanes", [])
         if not isinstance(lanes, list) or len(lanes) < 1:
@@ -107,35 +108,44 @@ class LaneManager:
         polys: dict[str, np.ndarray] = {}
         areas: dict[str, float] = {}
         centroid_x: dict[str, float] = {}
+        centroid_y: dict[str, float] = {}
 
         for idx, lane_entry in enumerate(lanes):
             name = loaded_names[idx]
             pts = lane_entry.get("polygon", [])
-            if not isinstance(pts, list) or len(pts) != 4:
-                return False
+            if not isinstance(pts, list) or len(pts) < 3:
+                continue
 
-            poly = np.array(pts, dtype=np.int32)
+            poly = np.array(pts, dtype=np.float32)
+            poly[:, 0] *= scale_x
+            poly[:, 1] *= scale_y
+            poly = poly.astype(np.int32)
+            
             polys[name] = poly
             areas[name] = float(cv2.contourArea(poly))
 
             M = cv2.moments(poly)
             if M.get("m00", 0) != 0:
                 centroid_x[name] = float(M["m10"] / M["m00"])
+                centroid_y[name] = float(M["m01"] / M["m00"])
             else:
-                # Fallback centroid x: average of left/right x in the quad
-                centroid_x[name] = float((poly[0][0] + poly[1][0]) / 2.0)
+                centroid_x[name] = float(np.mean(poly[:, 0]))
+                centroid_y[name] = float(np.mean(poly[:, 1]))
 
         self._polygons = polys
         self._areas = areas
         self._lane_centroid_x = centroid_x
+        self._lane_centroid_y = centroid_y
 
-        print(f"[LaneManager] Loaded calibration for {src_base}: {len(lanes)} lanes")
+        print(f"[LaneManager] Loaded calibration for {src_base}: {len(polys)} lanes")
+        print("Loaded lanes:", list(self._polygons.keys()))
         return True
 
     def _build_polygons(self) -> None:
         self._polygons = {}
         self._areas = {}
         self._lane_centroid_x = {}
+        self._lane_centroid_y = {}
 
         if self._try_load_calibration():
             return
@@ -169,8 +179,10 @@ class LaneManager:
             M = cv2.moments(poly)
             if M.get("m00", 0) != 0:
                 self._lane_centroid_x[name] = float(M["m10"] / M["m00"])
+                self._lane_centroid_y[name] = float(M["m01"] / M["m00"])
             else:
                 self._lane_centroid_x[name] = float(x1 + (x2 - x1) / 2.0)
+                self._lane_centroid_y[name] = float(y_top + (y_bottom - y_top) / 2.0)
 
     def get_polygons(self) -> dict:
         return self._polygons
@@ -179,17 +191,44 @@ class LaneManager:
         return self._areas.get(name, 1.0)
 
     def _find_lane(self, det) -> Optional[str]:
-        cx = getattr(det, "cx", None)
-        cy = getattr(det, "cy", None)
-        if cx is None or cy is None:
-            center = getattr(det, "center", (0, 0))
-            cx = center[0]
-            cy = center[1]
+        # Compute centroid using bounding box if available
+        x1 = getattr(det, "x1", None)
+        y1 = getattr(det, "y1", None)
+        x2 = getattr(det, "x2", None)
+        y2 = getattr(det, "y2", None)
+        
+        if x1 is not None and x2 is not None and y1 is not None and y2 is not None:
+            cx = int((x1 + x2) / 2)
+            cy = int((y1 + y2) / 2)
+        else:
+            cx = int(getattr(det, "cx", 0))
+            cy = int(getattr(det, "cy", 0))
 
-        for name, poly in self._polygons.items():
+        MAX_FALLBACK_DISTANCE = 99999  # pixels — tunable threshold
+
+        assigned_lane = None
+
+        # Check membership using pointPolygonTest
+        for ln, poly in self._polygons.items():
             if cv2.pointPolygonTest(poly, (float(cx), float(cy)), False) >= 0:
-                return name
-        return None
+                assigned_lane = ln
+                break
+
+        # Strong fallback using Euclidean distance to polygon centroids
+        if assigned_lane is None and self._lane_centroid_y and self._polygons:
+            import math
+            distances = {
+                ln: math.hypot(float(cx) - self._lane_centroid_x[ln],
+                               float(cy) - self._lane_centroid_y[ln])
+                for ln in self._polygons
+            }
+            if distances:
+                nearest = min(distances, key=distances.get)
+                min_dist = distances[nearest]
+                if min_dist <= MAX_FALLBACK_DISTANCE:
+                    assigned_lane = nearest
+
+        return assigned_lane
 
     def _nearest_lane_by_cx(self, cx: float) -> Optional[str]:
         if not self._lane_centroid_x:
@@ -201,13 +240,7 @@ class LaneManager:
 
         for det in detections:
             lane = self._find_lane(det)
-            if lane is None:
-                cx = getattr(det, "cx", None)
-                if cx is None:
-                    center = getattr(det, "center", (0, 0))
-                    cx = float(center[0])
-                lane = self._nearest_lane_by_cx(float(cx))
-
+            
             det.lane = lane
             if lane and lane in lane_map:
                 lane_map[lane].append(det)

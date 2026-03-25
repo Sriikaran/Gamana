@@ -136,6 +136,8 @@ def main() -> None:
     current_source = config.VIDEO_SOURCE
 
     print("[Main] Starting processing loop. Press Q to quit.")
+    
+    global_vehicle_state = {}
 
     while cap.isOpened():
         loop_t0 = time.perf_counter()
@@ -166,6 +168,7 @@ def main() -> None:
                 prev_green = ""
                 prev_behaviour_events = []
                 frame_count = 0
+                global_vehicle_state = {}
             continue
 
         ret, frame = cap.read()
@@ -206,17 +209,61 @@ def main() -> None:
                     d.cy = int(d.cy * sy)
                     d.area = max(0, (d.x2 - d.x1) * (d.y2 - d.y1))
 
-            detections = mot_tracker.update(detections)
             last_detections = detections
         else:
             detections = last_detections
+
+        # ALWAYS update tracker
+        detections = mot_tracker.update(detections, global_vehicle_state, frame_count)
 
         detection_ok = len(detections) > 0
 
         per_lane = lane_mgr.assign_lanes(detections)
 
+        # ── Update lane assignments in global state ──
+        for ln, dets in per_lane.items():
+            for d in dets:
+                if d.track_id not in global_vehicle_state:
+                    global_vehicle_state[d.track_id] = {
+                        "lane": ln,
+                        "speed": getattr(d, "speed", 0.0),
+                        "is_moving": getattr(d, "is_moving", True),
+                        "wait_time": 0.0,
+                        "last_seen": frame_count,
+                    }
+                else:
+                    vs = global_vehicle_state[d.track_id]
+                    vs["lane"] = ln
+                    vs["speed"] = getattr(d, "speed", 0.0)
+                    vs["is_moving"] = getattr(d, "is_moving", True)
+                    vs["last_seen"] = frame_count
+
+        # Force-assign vehicles with lane=None to nearest lane
+        for det in detections:
+            if det.track_id in global_vehicle_state:
+                if global_vehicle_state[det.track_id]["lane"] is None:
+                    nearest = min(
+                        lane_mgr._lane_centroid_x.keys(),
+                        key=lambda ln: abs(det.cx - lane_mgr._lane_centroid_x[ln])
+                    )
+                    global_vehicle_state[det.track_id]["lane"] = nearest
+                    det.lane = nearest
+                    per_lane[nearest].append(det)
+
+        # Remove stale vehicles and record flow
+        to_delete = []
+        for tid, v in global_vehicle_state.items():
+            if frame_count - v["last_seen"] > 30:
+                lane = v.get("lane")
+                if lane:
+                    analyzer.record_flow(lane)
+                to_delete.append(tid)
+
+        for tid in to_delete:
+            del global_vehicle_state[tid]
         signal_for_analyzer = controller._active
-        lane_stats = analyzer.update(per_lane, signal_for_analyzer)
+        
+        lane_stats = analyzer.update(global_vehicle_state, list(config.LANE_NAMES), signal_for_analyzer)
 
         predicted_pressures = predictor.update(lane_stats)
         trends = {ln: predictor.trend_direction(ln) for ln in config.LANE_NAMES}

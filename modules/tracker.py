@@ -29,27 +29,62 @@ class MotionTracker:
         self._history: Dict[int, deque] = defaultdict(
             lambda: deque(maxlen=MOTION_HISTORY_LEN)
         )
+        # track_id → deque of speeds (pixels/frame)
+        self._speed_history: Dict[int, deque] = defaultdict(
+            lambda: deque(maxlen=MOTION_HISTORY_LEN)
+        )
         # track_id → frame count since last seen (for stale cleanup)
         self._last_seen: Dict[int, int] = {}
         self._frame_idx: int = 0
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def update(self, detections: List[Detection]) -> List[Detection]:
+    def update(self, detections: List[Detection], vehicle_state: dict, frame_idx: int) -> List[Detection]:
         """
         Update motion history for all current detections.
-        Sets Detection.is_moving and returns the (same) list.
+        Sets Detection.is_moving, Detection.speed, Detection.speed_history and returns the list.
+        Also updates the global vehicle_state dictionary.
         """
-        self._frame_idx += 1
+        self._frame_idx = frame_idx
         active_ids = set()
 
         for det in detections:
             tid = det.track_id
             active_ids.add(tid)
             self._last_seen[tid] = self._frame_idx
+            
+            # Compute speed from previous frame
+            hist = self._history[tid]
+            if len(hist) > 0:
+                last_pt = hist[-1]
+                dx = det.cx - last_pt[0]
+                dy = det.cy - last_pt[1]
+                speed = (dx * dx + dy * dy) ** 0.5
+                if abs(dx) < 1 and abs(dy) < 1:
+                    speed *= 0.5
+            else:
+                speed = 0.0
+                
             self._history[tid].append((det.cx, det.cy))
+            self._speed_history[tid].append(speed)
 
+            det.speed = speed
+            det.speed_history = list(self._speed_history[tid])
             det.is_moving = self._is_moving(tid)
+
+            # ── Update global vehicle state ──
+            if tid not in vehicle_state:
+                vehicle_state[tid] = {
+                    "lane": None,
+                    "speed": speed,
+                    "is_moving": det.is_moving,
+                    "wait_time": 0.0,
+                    "last_seen": frame_idx
+                }
+            else:
+                vehicle_state[tid]["speed"] = speed
+                vehicle_state[tid]["is_moving"] = det.is_moving
+                vehicle_state[tid]["last_seen"] = frame_idx
 
         # ── Garbage-collect stale tracks ──────────────────────────────────
         stale_ids = [
@@ -58,6 +93,7 @@ class MotionTracker:
         ]
         for tid in stale_ids:
             self._history.pop(tid, None)
+            self._speed_history.pop(tid, None)
             self._last_seen.pop(tid, None)
 
         return detections
@@ -86,4 +122,4 @@ class MotionTracker:
             dy = b[1] - a[1]
             total_disp += (dx * dx + dy * dy) ** 0.5
 
-        return total_disp > STOPPED_THRESHOLD
+        return total_disp > STOPPED_THRESHOLD * 1.5

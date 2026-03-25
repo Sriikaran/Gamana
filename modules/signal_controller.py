@@ -101,7 +101,7 @@ class SignalController:
 
     def __init__(self) -> None:
         self._state:           SignalState = SignalState.NORMAL
-        self._active:          str         = config.LANE_NAMES[0]
+        self._active:          str         = ""
         self._green_start:     float       = time.time()
         self._green_duration:  int         = GREEN_LOW_TIME
         self._cooldown_end:    float       = 0.0
@@ -130,6 +130,10 @@ class SignalController:
         # don't keep extending on every frame the event fires.
         self._phantom_ext_applied: float = 0.0   # total seconds already added
 
+        # ── Phase 2: Fairness Tracking ─────────────────────────────────────
+        self._wait_times: Dict[str, float] = {}
+        self._last_update_time: float = time.time()
+
     # ── Public API ────────────────────────────────────────────────────────────
 
     def update(
@@ -148,6 +152,22 @@ class SignalController:
         `frame`               — current video frame (for HSV ambulance check)
         """
         now = time.time()
+        dt = now - self._last_update_time
+        self._last_update_time = now
+
+        # Update wait times
+        for ln in lane_stats:
+            if ln not in self._wait_times:
+                self._wait_times[ln] = 0.0
+                
+        if not self._active and lane_stats:
+            self._active = list(lane_stats.keys())[0]
+
+        for ln in lane_stats:
+            if ln == self._active:
+                self._wait_times[ln] = 0.0
+            else:
+                self._wait_times[ln] += dt
 
         # ── Failsafe check ─────────────────────────────────────────────────
         if not detection_ok:
@@ -200,7 +220,7 @@ class SignalController:
         # ── Build status ───────────────────────────────────────────────────
         signals = {
             ln: ("GREEN" if ln == self._active else "RED")
-            for ln in config.LANE_NAMES
+            for ln in lane_stats
         }
 
         elapsed   = now - self._green_start
@@ -250,34 +270,74 @@ class SignalController:
         if not timer_expired and not force_reevaluate:
             return
 
-        # ── Find best lane with boosted pressures ───────────────────────────
-        best, best_score, cur_score = self._best_lane_with_scores(
-            lane_stats, predicted
-        )
+        # ── PHASE 2: ADAPTIVE SIGNAL CONTROL ───────────────────────────────
 
-        lead = best_score - cur_score
+        # 1. Smoothed Pressure
+        pressures = {}
+        for ln in lane_stats:
+            actual = lane_stats[ln].raw_pressure if ln in lane_stats else 0.0
+            pred   = (predicted or {}).get(ln, 0.0)
+            boost  = self._pressure_boosts.get(ln, 0.0)
+            pressures[ln] = actual + pred * 0.4 + boost
 
-        # ── Sustained-lead hysteresis: must lead by 15+ pts for 5+ seconds ─
-        if best != self._active and lead >= SWITCH_THRESHOLD:
-            if self._candidate_lane != best:
-                # New candidate — start the clock
-                self._candidate_lane  = best
-                self._candidate_since = now
-            sustained = now - self._candidate_since
-            if sustained >= self.SWITCH_SUSTAIN_S or force_reevaluate:
-                # Cleared hysteresis (or forced by QUEUE_BUILDUP)
-                prev   = self._active
-                reason = f"{best} pressure {best_score:.0f} vs {cur_score:.0f}"
-                self._switch_to(best, now)
-                self._set_switch_banner(prev, best, reason, now)
-                self._candidate_lane = None
+        # 2. Normalize Pressure
+        total_P = sum(pressures.values())
+        T = {}
+        N = len(lane_stats)
+        for ln in lane_stats:
+            if total_P > 0:
+                T_i = pressures[ln] / total_P
+            else:
+                T_i = 1.0 / max(1, N)
+            # 3. Clamp Share
+            T[ln] = max(config.MIN_SHARE, min(config.MAX_SHARE, T_i))
+
+        # Lane selection candidates
+        cur_lane = self._active
+        best_lane = max(pressures, key=pressures.__getitem__)
+        
+        # 6. Fairness Override
+        fairness_override = None
+        longest_waiting = max(self._wait_times, key=self._wait_times.__getitem__)
+        if self._wait_times[longest_waiting] > config.MAX_WAIT_TIME:
+            fairness_override = longest_waiting
+
+        # 5. Lane Selection with Stability
+        if fairness_override:
+            selected_lane = fairness_override
+            reason = "fairness override"
         else:
-            # Lead lost or same lane — reset candidate
-            if timer_expired and best == self._active:
-                # Refresh the green timer for the same lane
+            p_new = pressures[best_lane]
+            p_cur = pressures[cur_lane]
+            if (p_new - p_cur) > config.SWITCH_DELTA:
+                selected_lane = best_lane
+                reason = "higher pressure"
+            else:
+                selected_lane = cur_lane
+                reason = "stability hold"
+
+        if selected_lane != self._active or force_reevaluate or timer_expired:
+            # 4. Green Time Allocation
+            G_i = config.MIN_GREEN_TIME + (config.MAX_GREEN_TIME - config.MIN_GREEN_TIME) * T[selected_lane]
+            G_i = int(G_i)
+
+            # 8. Output
+            print("\n[Signal Decision]")
+            print(f"Selected Lane: {selected_lane}")
+            print(f"Pressure: {pressures[selected_lane]:.1f}")
+            print(f"Green Time: {G_i}s")
+            print(f"Reason: {reason}\n")
+
+            if selected_lane != self._active:
+                prev = self._active
+                self._switch_to(selected_lane, now)
+                self._green_duration = G_i
+                self._set_switch_banner(prev, selected_lane, reason, now)
+            else:
+                # Refresh current lane
                 self._green_start = now
+                self._green_duration = G_i
                 self._phantom_ext_applied = 0.0
-            self._candidate_lane = None
 
     def _run_ambulance(
         self, lane_stats: Dict[str, LaneStats], now: float,
@@ -299,7 +359,9 @@ class SignalController:
         """Round-robin rotation with fixed timing (FAILSAFE_GREEN_TIME per lane)."""
         elapsed = now - self._green_start
         if elapsed >= FAILSAFE_GREEN_TIME:
-            names = config.LANE_NAMES
+            names = list(self._wait_times.keys()) if self._wait_times else []
+            if not names:
+                return
             self._failsafe_idx = (self._failsafe_idx + 1) % len(names)
             self._active       = names[self._failsafe_idx]
             self._green_start  = now
@@ -408,7 +470,7 @@ class SignalController:
         Score = actual_pressure + 0.4 * predicted_pressure + boost.
         """
         scores: Dict[str, float] = {}
-        for ln in config.LANE_NAMES:
+        for ln in lane_stats:
             actual = (lane_stats[ln].pressure if ln in lane_stats else 0.0)
             pred   = (predicted or {}).get(ln, 0.0)
             boost  = self._pressure_boosts.get(ln, 0.0)

@@ -1,14 +1,3 @@
-"""
-calibrate_lanes.py — 2-point smart lane calibration
-
-Flow:
-  1) User clicks LEFT road edge and RIGHT road edge on first frame.
-  2) Tool previews LANE_COUNT equal vertical lane strips.
-  3) Press Y to save, R to redo.
-"""
-
-from __future__ import annotations
-
 import argparse
 import json
 import os
@@ -19,170 +8,160 @@ import numpy as np
 
 import config
 
+def get_args():
+    parser = argparse.ArgumentParser(description="Calibrate lane polygons for Pragati AI.")
+    parser.add_argument("--source", type=str, required=True, help="Path to the video file to calibrate.")
+    return parser.parse_args()
 
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Calibrate lane polygons from the first frame")
-    p.add_argument("--source", required=True, help="Video file path (e.g. intersection.mp4)")
-    return p.parse_args()
-
-
-def main() -> None:
-    args = parse_args()
-
-    src = args.source
-    src_name = os.path.basename(src)
-    stem = os.path.splitext(src_name)[0]
-
-    cap = cv2.VideoCapture(src)
+def main():
+    args = get_args()
+    source_path = args.source
+    
+    if not os.path.isfile(source_path):
+        print(f"Error: Video file '{source_path}' not found.")
+        sys.exit(1)
+        
+    cap = cv2.VideoCapture(source_path)
     if not cap.isOpened():
-        print(f"[ERROR] Cannot open source: {src}")
+        print(f"Error: Could not open video '{source_path}'.")
         sys.exit(1)
-
-    ok, frame = cap.read()
+        
+    ret, frame = cap.read()
     cap.release()
-    if not ok or frame is None:
-        print("[ERROR] Cannot read first frame")
+    if not ret or frame is None:
+        print("Error: Could not read the first frame.")
         sys.exit(1)
-
-    H, W = frame.shape[:2]
-    y_top = (H * 30) // 100
-    y_bottom = H
-
-    lane_count = max(1, int(config.LANE_COUNT))
-    left_pt = None  # (x,y)
-    right_pt = None  # (x,y)
-
-    window = "Road Boundary Selection"
-    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-
-    lane_colors = [
-        (0, 255, 255),
-        (0, 200, 100),
-        (255, 128, 0),
-        (200, 100, 255),
-        (0, 165, 255),
-        (255, 80, 80),
-        (120, 255, 120),
-        (180, 180, 255),
-    ]
-
-    def lane_names(n: int) -> list[str]:
-        return config.get_lane_names(n)
-
-    def preview_polygons(n: int) -> list[list[list[int]]]:
-        if left_pt is None or right_pt is None:
-            return []
-        x1 = int(left_pt[0])
-        x2 = int(right_pt[0])
-        if x2 < x1:
-            x1, x2 = x2, x1
-
-        span = max(1, x2 - x1)
-        bounds = [int(round(x1 + i * span / n)) for i in range(n + 1)]
-        bounds[0] = x1
-        bounds[-1] = x2
-
-        polys = []
-        for i in range(n):
-            lx = bounds[i]
-            rx = bounds[i + 1]
-            polys.append([[lx, y_top], [rx, y_top], [rx, y_bottom], [lx, y_bottom]])
-        return polys
-
-    def redraw() -> np.ndarray:
-        vis = frame.copy()
-
-        instruction = "Click LEFT edge, then RIGHT edge. Y=confirm/save, R=redo."
-        cv2.putText(vis, instruction, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
-        cv2.putText(vis, instruction, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
-
-        if left_pt is not None:
-            cv2.circle(vis, (int(left_pt[0]), int(left_pt[1])), 6, (0, 255, 0), -1, cv2.LINE_AA)
-            cv2.putText(vis, "LEFT", (int(left_pt[0]) + 8, int(left_pt[1]) + 6),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
-        if right_pt is not None:
-            cv2.circle(vis, (int(right_pt[0]), int(right_pt[1])), 6, (0, 0, 255), -1, cv2.LINE_AA)
-            cv2.putText(vis, "RIGHT", (int(right_pt[0]) + 8, int(right_pt[1]) + 6),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
-
-        polys = preview_polygons(lane_count)
-        if polys:
-            names = lane_names(lane_count)
-            for i, poly in enumerate(polys):
-                pts = np.array(poly, dtype=np.int32)
-                col = lane_colors[i % len(lane_colors)]
-                cv2.polylines(vis, [pts], True, col, 2, cv2.LINE_AA)
-                cx = int((poly[0][0] + poly[2][0]) / 2)
-                cy = int((poly[0][1] + poly[2][1]) / 2)
-                label = names[i] if i < len(names) else f"LANE_{i+1}"
-                cv2.putText(vis, label, (cx - 35, cy),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, col, 2, cv2.LINE_AA)
-
-        hint2 = f"Lanes: {lane_count} | Y save | R redo | ESC exit"
-        cv2.putText(vis, hint2, (10, H - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-        return vis
-
-    def on_mouse(event, x, y, flags, param) -> None:
-        nonlocal left_pt, right_pt
-        if event != cv2.EVENT_LBUTTONDOWN:
-            return
-        if left_pt is None:
-            left_pt = (x, y)
-            return
-        if right_pt is None:
-            right_pt = (x, y)
-            return
-
-        # If both are set, overwrite (keeps UX simple)
-        left_pt = (x, y)
-        right_pt = None
-
-    cv2.setMouseCallback(window, on_mouse)
-
+        
+    frame_h, frame_w = frame.shape[:2]
+    
+    lane_count = config.LANE_COUNT
+    lane_names = config.LANE_NAMES
+    
+    print(f"Calibrating {lane_count} lanes for {source_path}")
+    print("Controls:")
+    print("  - Click: Add polygon point")
+    print("  - 'n': Next lane (or finish)")
+    print("  - 'u': Undo last point")
+    print("  - 's': Save and exit")
+    print("  - 'q': Quit without saving")
+    
+    current_lane_idx = 0
+    polygons = [[] for _ in range(lane_count)]
+    
+    window_name = "Lane Calibration"
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    
+    def mouse_callback(event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            if current_lane_idx < lane_count:
+                polygons[current_lane_idx].append([x, y])
+                
+    cv2.setMouseCallback(window_name, mouse_callback)
+    
     while True:
-        cv2.imshow(window, redraw())
-        k = cv2.waitKey(30) & 0xFF
-
-        if k == 27:  # ESC
-            break
-
-        # redo
-        if k in (ord("r"), ord("R")):
-            left_pt = None
-            right_pt = None
-            continue
-
-        # save
-        if k in (ord("y"), ord("Y")):
-            if left_pt is None or right_pt is None:
+        display = frame.copy()
+        
+        # Draw completed polygons
+        for i, poly in enumerate(polygons):
+            if not poly:
                 continue
-
-            polys = preview_polygons(lane_count)
-            names = lane_names(lane_count)
-
-            lanes = []
-            for i, poly in enumerate(polys):
-                nm = names[i] if i < len(names) else f"LANE_{i+1}"
-                lanes.append({"name": nm, "polygon": poly})
-
-            out = {
-                "source": src_name,
-                "width": int(W),
-                "height": int(H),
-                "lanes": lanes,
+            
+            color = config.LANE_COLORS_MAP.get(lane_names[i], (0, 255, 0))
+            pts = np.array(poly, np.int32)
+            
+            if i < current_lane_idx:
+                # Completed lane
+                cv2.polylines(display, [pts], True, color, 2)
+            else:
+                # Current lane being drawn
+                cv2.polylines(display, [pts], False, color, 2)
+                for pt in poly:
+                    cv2.circle(display, tuple(pt), 4, color, -1)
+                    
+        # Add text overlay
+        if current_lane_idx < lane_count:
+            status_text = f"Drawing {lane_names[current_lane_idx]} ({len(polygons[current_lane_idx])} points)"
+        else:
+            status_text = "All lanes defined. Press 's' to save or 'u' to undo."
+            
+        cv2.putText(display, status_text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        
+        cv2.imshow(window_name, display)
+        key = cv2.waitKey(20) & 0xFF
+        
+        if key == ord('q'):
+            print("Quit without saving.")
+            break
+        elif key == ord('n'):
+            if current_lane_idx < lane_count:
+                if len(polygons[current_lane_idx]) < 3:
+                    print(f"Warning: {lane_names[current_lane_idx]} needs at least 3 points.")
+                else:
+                    current_lane_idx += 1
+        elif key == ord('u'):
+            if current_lane_idx < lane_count and len(polygons[current_lane_idx]) > 0:
+                polygons[current_lane_idx].pop()
+            elif current_lane_idx > 0 and (current_lane_idx >= lane_count or len(polygons[current_lane_idx]) == 0):
+                current_lane_idx -= 1
+                if len(polygons[current_lane_idx]) > 0:
+                    polygons[current_lane_idx].pop()
+        elif key == ord('s'):
+            # Validate all lanes have >= 3 points
+            valid = True
+            for i, poly in enumerate(polygons):
+                if len(poly) < 3:
+                    print(f"Error: {lane_names[i]} has fewer than 3 points.")
+                    valid = False
+            
+            if not valid:
+                continue
+                
+            # Basic overlap check using masks
+            overlap = False
+            masks = []
+            for poly in polygons:
+                mask = np.zeros((frame_h, frame_w), dtype=np.uint8)
+                pts = np.array(poly, np.int32)
+                cv2.fillPoly(mask, [pts], 255)
+                masks.append(mask)
+                
+            for i in range(len(masks)):
+                for j in range(i + 1, len(masks)):
+                    intersection = cv2.bitwise_and(masks[i], masks[j])
+                    if cv2.countNonZero(intersection) > 0:
+                        overlap = True
+                        print(f"Warning: {lane_names[i]} and {lane_names[j]} overlap!")
+                        
+            if overlap:
+                print("Please fix the overlapping lanes before saving. (Press 'u' to undo)")
+                continue
+                
+            # Save JSON
+            stem = os.path.splitext(os.path.basename(source_path))[0]
+            out_filename = f"lane_config_{stem}.json"
+            out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), out_filename)
+            
+            lanes_data = []
+            for i, poly in enumerate(polygons):
+                lanes_data.append({
+                    "name": lane_names[i],
+                    "polygon": poly
+                })
+                
+            output_data = {
+                "source": os.path.basename(source_path),
+                "width": frame_w,
+                "height": frame_h,
+                "lanes": lanes_data
             }
-
-            out_name = f"lane_config_{stem}.json"
-            out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), out_name)
-            with open(out_path, "w", encoding="utf-8") as f:
-                json.dump(out, f, indent=2)
-
-            print(f"Saved to {out_name}")
+            
+            with open(out_path, 'w', encoding='utf-8') as f:
+                json.dump(output_data, f, indent=2)
+                
+            print(f"Successfully saved {lane_count} lanes to {out_path}")
             break
 
     cv2.destroyAllWindows()
 
-
 if __name__ == "__main__":
     main()
-

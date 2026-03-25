@@ -95,6 +95,7 @@ def update_state(
                 "vehicle_counts":   getattr(stats, "vehicle_counts",   {}),
                 "flow_rate":        round(getattr(stats, "flow_rate",  0.0), 3),
                 "wait_time":        round(getattr(stats, "wait_time",  0.0), 1),
+                "trend":            getattr(stats, "trend",            "stable"),
             }
 
     with _lock:
@@ -261,7 +262,7 @@ def api_set_lanes():
         return jsonify({"error": "count must be 1-6"}), 400
 
     config.LANE_COUNT = count
-    config.LANE_NAMES = config.get_lane_names(count)
+    config.LANE_NAMES = [f"LANE_{i+1}" for i in range(count)]
 
     with _lock:
         _state["lane_count"] = count
