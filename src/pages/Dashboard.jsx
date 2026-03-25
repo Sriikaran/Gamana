@@ -8,6 +8,7 @@ import SignalPanel from '../components/panels/SignalPanel';
 import AlertsPanel from '../components/panels/AlertsPanel';
 import TrafficChart from '../components/charts/TrafficChart';
 import TrafficMap from '../components/maps/TrafficMap';
+import SurveillancePanel from '../components/panels/SurveillancePanel';
 
 const getSystemStatus = (congestion) => {
   if (congestion > 70) return { label: 'CRITICAL', dot: 'bg-[#D94A4A]' };
@@ -105,6 +106,9 @@ const Dashboard = () => {
           <StatCard key={card.title} {...card} />
         ))}
       </div>
+
+      {/* CCTV Surveillance Panel */}
+      <SurveillancePanel />
 
       {/* Traffic chart */}
       <TrafficPanel />

@@ -10,17 +10,17 @@ import {
 } from 'lucide-react';
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', icon: LayoutDashboard, active: true },
+  { label: 'Dashboard', icon: LayoutDashboard },
   { label: 'Traffic', icon: TrafficCone },
   { label: 'Signals', icon: Radio },
   { label: 'Alerts', icon: AlertTriangle },
 ];
 
-const MainLayout = ({ children }) => {
+const MainLayout = ({ children, activePage, onNavigate }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-[#0B0B0B] text-white">
+    <div className="flex h-screen w-full bg-[#0B0B0B] text-white overflow-hidden">
         {/* ── Mobile overlay ── */}
         {sidebarOpen && (
           <div
@@ -51,28 +51,36 @@ const MainLayout = ({ children }) => {
 
           {/* Nav links */}
           <nav className="flex-1 space-y-2 px-4 py-2">
-            {NAV_ITEMS.map(({ label, icon: Icon, active }) => (
-              <button
-                key={label}
-                className={`
-                  group flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium
-                  transition-all duration-300 ease-out
-                  ${
-                    active
-                      ? 'bg-[#121212] text-white border border-[#1F1F1F]'
-                      : 'text-[#A0A0A0] border border-transparent hover:text-white hover:bg-[#121212]'
-                  }
-                `}
-              >
-                <Icon
-                  size={18}
-                  className={`transition-colors duration-300 ${
-                    active ? 'text-[#D4AF37]' : 'text-[#666666] group-hover:text-[#A0A0A0]'
-                  }`}
-                />
-                {label}
-              </button>
-            ))}
+            {NAV_ITEMS.map((item) => {
+              const active = activePage === item.label;
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.label}
+                  onClick={() => {
+                    onNavigate(item.label);
+                    setSidebarOpen(false);
+                  }}
+                  className={`
+                    group flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium
+                    transition-all duration-300 ease-out cursor-pointer
+                    ${
+                      active
+                        ? 'bg-[#121212] text-white border border-[#1F1F1F]'
+                        : 'text-[#A0A0A0] border border-transparent hover:text-white hover:bg-[#121212]'
+                    }
+                  `}
+                >
+                  <Icon
+                    size={18}
+                    className={`transition-colors duration-300 ${
+                      active ? 'text-[#D4AF37]' : 'text-[#666666] group-hover:text-[#A0A0A0]'
+                    }`}
+                  />
+                  {item.label}
+                </button>
+              );
+            })}
           </nav>
 
           {/* Footer */}
