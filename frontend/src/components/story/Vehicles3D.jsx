@@ -10,10 +10,9 @@ const COLORS = ['#FFFFFF', '#D1D1D1', '#8A8A8A', '#525252', '#3B4D61', '#546A7B'
 const MAX_SPEED = 10;
 const ACCEL_RATE = 5;       // units/s² for speeding up
 const BRAKE_RATE = 14;      // units/s² for slowing down (higher = snappier brakes)
-const MIN_GAP = 2.8;        // absolute minimum bumper-to-bumper distance
-const DESIRED_GAP = 5.0;    // comfortable following distance
-const CARS_PER_LANE = 10;
-const RECYCLE_LIMIT = 100;  // progression value at which car is recycled
+const MIN_GAP = 4.2;        // absolute minimum bumper-to-bumper distance
+const DESIRED_GAP = 6.0;    // comfortable following distance
+const CARS_PER_LANE = 6;    // exactly ~40% reduction from 10
 
 // Intersection geometry (must match Intersection3D.jsx)
 const IX_HALF_X = 6;   // verticalRoadWidth/2 + 1  (buffer)
@@ -23,12 +22,12 @@ const IX_HALF_Z = 11;  // horizontalRoadWidth/2 + 1 (buffer)
 // LANE DEFINITIONS — 6 lanes, no lane-change logic
 // ═══════════════════════════════════════════════════════════════
 const LANES = [
-  { id: 'NS', dir: [0, 0, -1], start: [2.5, 0, 95],   stopLine: 12,   signal: 'ns' },
-  { id: 'SN', dir: [0, 0,  1], start: [-2.5, 0, -95],  stopLine: -12,  signal: 'ns' },
-  { id: 'EWo', dir: [-1, 0, 0], start: [95, 0, -7.5],  stopLine: 6.5,  signal: 'ew' },
-  { id: 'EWi', dir: [-1, 0, 0], start: [95, 0, -2.5],  stopLine: 6.5,  signal: 'ew' },
-  { id: 'WEi', dir: [1, 0, 0],  start: [-95, 0, 2.5],  stopLine: -6.5, signal: 'ew' },
-  { id: 'WEo', dir: [1, 0, 0],  start: [-95, 0, 7.5],  stopLine: -6.5, signal: 'ew' },
+  { id: 'NS', dir: [0, 0, -1], start: [2.5, 0, 95], stopLine: 12, signal: 'ns' },
+  { id: 'SN', dir: [0, 0, 1], start: [-2.5, 0, -95], stopLine: -12, signal: 'ns' },
+  { id: 'EWo', dir: [-1, 0, 0], start: [95, 0, -7.5], stopLine: 6.5, signal: 'ew' },
+  { id: 'EWi', dir: [-1, 0, 0], start: [95, 0, -2.5], stopLine: 6.5, signal: 'ew' },
+  { id: 'WEi', dir: [1, 0, 0], start: [-95, 0, 2.5], stopLine: -6.5, signal: 'ew' },
+  { id: 'WEo', dir: [1, 0, 0], start: [-95, 0, 7.5], stopLine: -6.5, signal: 'ew' },
 ].map(l => ({
   ...l,
   dir: new THREE.Vector3(...l.dir),
@@ -51,15 +50,15 @@ const insideIX = (pos) => Math.abs(pos.x) < IX_HALF_X && Math.abs(pos.z) < IX_HA
 const SmallCar = forwardRef(({ color, scale }, ref) => {
   const paint = useMemo(() => <meshStandardMaterial color={color} roughness={0.6} metalness={0.2} />, [color]);
   const glass = useMemo(() => <meshStandardMaterial color="#020202" roughness={0.1} metalness={0.8} />, []);
-  const tire  = useMemo(() => <meshStandardMaterial color="#0A0A0A" roughness={0.9} />, []);
+  const tire = useMemo(() => <meshStandardMaterial color="#0A0A0A" roughness={0.9} />, []);
   return (
     <group ref={ref} scale={scale}>
       <group rotation={[0, Math.PI, 0]}>
         <mesh position={[0, 0.55, 0]} castShadow receiveShadow><boxGeometry args={[1.6, 0.4, 3.8]} />{paint}</mesh>
         <mesh position={[0, 0.9, 0.5]} castShadow receiveShadow><boxGeometry args={[1.4, 0.3, 2.0]} />{glass}</mesh>
-        {[[-0.8,1.2],[0.8,1.2],[-0.8,-1.2],[0.8,-1.2]].map(([x,z],i) => (
-          <mesh key={i} position={[x, 0.35, z]} rotation={[0,0,Math.PI/2]} castShadow>
-            <cylinderGeometry args={[0.15,0.15,0.1,16]} />{tire}
+        {[[-0.8, 1.2], [0.8, 1.2], [-0.8, -1.2], [0.8, -1.2]].map(([x, z], i) => (
+          <mesh key={i} position={[x, 0.35, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[0.15, 0.15, 0.1, 16]} />{tire}
           </mesh>
         ))}
       </group>
@@ -103,10 +102,11 @@ export default function Vehicles3D({ nsLight, ewLight }) {
           signal: lane.signal,
 
           // Human-like variance
-          prefSpeed: MAX_SPEED * (0.75 + Math.random() * 0.3),
-          rxDelay:   0.2 + Math.random() * 0.4,
-          rxTimer:   0,
+          prefSpeed: MAX_SPEED * (0.8 + Math.random() * 0.2),
+          rxDelay: 0.4 + Math.random() * 0.5,
+          rxTimer: 0,
           perceivedGap: DESIRED_GAP * 2,
+          perceivedSpeed: MAX_SPEED,
 
           // State flags
           crossedStop: false,
@@ -133,10 +133,10 @@ export default function Vehicles3D({ nsLight, ewLight }) {
   // Periodic micro-slowdown on hero lane — respects all safety rules
   const distTimer = useRef(0);
   const DIST_LANE = 'WEi';       // hero lane (bottom-left road)
-  const DIST_CAR_IDX = 3;        // mid-queue vehicle
-  const DIST_INTERVAL = 4;       // seconds of normal flow (short for demo)
-  const DIST_DURATION = 5;       // seconds the slowdown lasts
-  const DIST_FACTOR = 0.65;      // reduce to 60-75% of prefSpeed
+  const DIST_CAR_IDX = 1;        // place disturbance nearer to front of fixed queue
+  const DIST_INTERVAL = 3;       // seconds of normal flow
+  const DIST_DURATION = 8;       // seconds the slowdown lasts (longer for ripple)
+  const DIST_FACTOR = 0.15;      // deep slowdown for visible wave
 
   // ── SIMULATION TICK ─────────────────────────────────────────
   useFrame((_, delta) => {
@@ -198,13 +198,14 @@ export default function Vehicles3D({ nsLight, ewLight }) {
           if (car.rxTimer >= car.rxDelay) {
             car.rxTimer = 0;
             car.perceivedGap = car.pos.distanceTo(ahead.pos);
+            car.perceivedSpeed = ahead.speed;
           }
 
           // If perceived gap is below comfortable range, ease off
-          if (car.perceivedGap < DESIRED_GAP * 2) {
-            const ratio = Math.max(0, car.perceivedGap - MIN_GAP) / (DESIRED_GAP * 2 - MIN_GAP);
-            const eased = ratio * ratio; // quadratic: gentle at distance, firm when close
-            const followV = Math.min(car.prefSpeed, ahead.speed * 1.05) * eased;
+          if (car.perceivedGap < DESIRED_GAP * 1.8) {
+            const ratio = Math.max(0, car.perceivedGap - MIN_GAP) / (DESIRED_GAP * 1.8 - MIN_GAP);
+            const eased = Math.pow(ratio, 1.5); // smoother power curve for compression
+            const followV = car.perceivedSpeed + (car.prefSpeed - car.perceivedSpeed) * eased;
             target = Math.min(target, followV);
           }
         }
@@ -254,13 +255,12 @@ export default function Vehicles3D({ nsLight, ewLight }) {
           const ahead = sorted[i - 1];
           const realDist = car.pos.distanceTo(ahead.pos);
 
-          if (realDist < DESIRED_GAP) {
-            // Linear ramp: full speed at DESIRED_GAP, zero at MIN_GAP
-            const t = Math.max(0, (realDist - MIN_GAP) / (DESIRED_GAP - MIN_GAP));
+          const COMPRESS_GAP = MIN_GAP + 1.2;
+          if (realDist < COMPRESS_GAP) {
+            // Linear ramp: full speed at COMPRESS_GAP, zero at MIN_GAP
+            // Uses real speed but only engages when close, allowing compression
+            const t = Math.max(0, (realDist - MIN_GAP) / (COMPRESS_GAP - MIN_GAP));
             target = Math.min(target, ahead.speed * t);
-          }
-          if (realDist <= MIN_GAP) {
-            target = 0; // HARD STOP — absolute override
           }
         }
 
@@ -275,8 +275,18 @@ export default function Vehicles3D({ nsLight, ewLight }) {
         // Move
         car.pos.addScaledVector(car.dir, car.speed * dt);
 
+        // ── NO OVERLAP GUARANTEE / SMOOTH DECELERATION ──
+        if (i > 0) {
+          const ahead = sorted[i - 1];
+          const currentDist = car.pos.distanceTo(ahead.pos);
+          if (currentDist < MIN_GAP) {
+            car.pos.copy(ahead.pos).addScaledVector(car.dir, -MIN_GAP);
+            car.speed = car.speed * 0.9;
+          }
+        }
+
         // ── RECYCLE ───────────────────────────────────────
-        if (myProg > RECYCLE_LIMIT) {
+        if (myProg > 120) {
           const tail = sorted[sorted.length - 1];
           const startProg = prog(laneDef.start, laneDef.dir);
           let newProg = startProg;
@@ -286,7 +296,7 @@ export default function Vehicles3D({ nsLight, ewLight }) {
           car.pos.x = car.dir.x !== 0 ? newProg * car.dir.x : laneDef.start.x;
           car.pos.y = 0;
           car.pos.z = car.dir.z !== 0 ? newProg * car.dir.z : laneDef.start.z;
-          car.speed = 0;
+          car.speed = car.prefSpeed;
           car.crossedStop = false;
           car.inIX = false;
           car.perceivedGap = DESIRED_GAP * 2;
@@ -295,9 +305,9 @@ export default function Vehicles3D({ nsLight, ewLight }) {
 
         // ── DEBUG CHECKS (console warnings) ───────────────
         if (i > 0) {
-          const realDist = car.pos.distanceTo(sorted[i-1].pos);
+          const realDist = car.pos.distanceTo(sorted[i - 1].pos);
           if (realDist < MIN_GAP * 0.5) {
-            console.warn(`[OVERLAP] car ${car.id} dist=${realDist.toFixed(2)} to car ${sorted[i-1].id} in lane ${laneId}`);
+            console.warn(`[OVERLAP] car ${car.id} dist=${realDist.toFixed(2)} to car ${sorted[i - 1].id} in lane ${laneId}`);
           }
         }
         if (car.inIX && car.speed === 0 && !car.crossedStop) {
@@ -326,7 +336,7 @@ export default function Vehicles3D({ nsLight, ewLight }) {
           glow.visible = true;
           // Intensity scales with how slowed the car is
           const slowness = 1 - car.speed / car.prefSpeed;
-          glow.material.opacity = Math.min(0.35, slowness * 0.5);
+          glow.material.opacity = Math.min(0.15, slowness * 0.2); // subtle glow
         }
         glowIdx++;
       }
@@ -339,7 +349,7 @@ export default function Vehicles3D({ nsLight, ewLight }) {
     // ── EVENT-DRIVEN STORY STAGE ─────────────────────────────
     // 1. Detect stage from simulation state
     let detectedStage = 0;
-    if (glowIdx >= 4)      detectedStage = 3;
+    if (glowIdx >= 4) detectedStage = 3;
     else if (glowIdx >= 2) detectedStage = 2;
     else if (glowIdx >= 1) detectedStage = 1;
 
@@ -360,8 +370,8 @@ export default function Vehicles3D({ nsLight, ewLight }) {
 
       // Only allow next transition after minimum display time
       if (detectedStage !== lastStage.current
-          && eventProgress > 0.5
-          && stepTimer.current >= MIN_STEP_VISIBLE) {
+        && eventProgress > 0.5
+        && stepTimer.current >= MIN_STEP_VISIBLE) {
         pendingStage.current = detectedStage;
         textPhase.current = 'fading-out';
         fadeTimer.current = 0;

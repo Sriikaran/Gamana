@@ -106,20 +106,24 @@ def main():
                 if len(polygons[current_lane_idx]) > 0:
                     polygons[current_lane_idx].pop()
         elif key == ord('s'):
-            # Validate all lanes have >= 3 points
-            valid = True
+            # Validate and keep only lanes with >= 3 points
+            valid_polygons = []
+            valid_names = []
             for i, poly in enumerate(polygons):
-                if len(poly) < 3:
-                    print(f"Error: {lane_names[i]} has fewer than 3 points.")
-                    valid = False
+                if len(poly) >= 3:
+                    valid_polygons.append(poly)
+                    valid_names.append(lane_names[i])
+                elif len(poly) > 0:
+                    print(f"Warning: {lane_names[i]} has {len(poly)} points (needs 3+), skipping.")
             
-            if not valid:
+            if not valid_polygons:
+                print("Error: No valid lanes to save.")
                 continue
                 
             # Basic overlap check using masks
             overlap = False
             masks = []
-            for poly in polygons:
+            for poly in valid_polygons:
                 mask = np.zeros((frame_h, frame_w), dtype=np.uint8)
                 pts = np.array(poly, np.int32)
                 cv2.fillPoly(mask, [pts], 255)
@@ -130,7 +134,7 @@ def main():
                     intersection = cv2.bitwise_and(masks[i], masks[j])
                     if cv2.countNonZero(intersection) > 0:
                         overlap = True
-                        print(f"Warning: {lane_names[i]} and {lane_names[j]} overlap!")
+                        print(f"Warning: {valid_names[i]} and {valid_names[j]} overlap!")
                         
             if overlap:
                 print("Please fix the overlapping lanes before saving. (Press 'u' to undo)")
@@ -142,9 +146,9 @@ def main():
             out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), out_filename)
             
             lanes_data = []
-            for i, poly in enumerate(polygons):
+            for i, poly in enumerate(valid_polygons):
                 lanes_data.append({
-                    "name": lane_names[i],
+                    "name": valid_names[i],
                     "polygon": poly
                 })
                 
@@ -158,7 +162,7 @@ def main():
             with open(out_path, 'w', encoding='utf-8') as f:
                 json.dump(output_data, f, indent=2)
                 
-            print(f"Successfully saved {lane_count} lanes to {out_path}")
+            print(f"Successfully saved {len(valid_polygons)} lanes to {out_path}")
             break
 
     cv2.destroyAllWindows()

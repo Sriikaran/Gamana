@@ -61,49 +61,63 @@ const useTrafficStore = create((set) => ({
   _intervalId: null,
 
   startSimulation: () => {
-    const id = setInterval(() => {
-      set((state) => {
-        if (!state.stats) return state;
+    // Clear existing interval if any
+    set((state) => {
+      if (state._intervalId) clearInterval(state._intervalId);
+      return {};
+    });
 
-        const vehicleDelta = Math.floor(Math.random() * 40) - 10;
-        const speedDelta = Math.floor(Math.random() * 6) - 3;
-        const congestionDelta = Math.floor(Math.random() * 4) - 1;
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch('/api/lanes');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        let totalVehicles = 0;
+        let totalPressure = 0;
+        let laneCount = 0;
+        let congestionScore = 10;
 
-        const newVehicles = Math.max(0, state.stats.totalVehicles + vehicleDelta);
-        const newSpeed = Math.max(5, Math.min(80, state.stats.avgSpeed + speedDelta));
-        const newCongestion = Math.max(0, Math.min(100, state.stats.congestionLevel + congestionDelta));
+        if (data.lanes) {
+          Object.values(data.lanes).forEach(lane => {
+            totalVehicles += (lane.total || 0);
+            totalPressure += (lane.pressure || 0);
+            laneCount++;
+            
+            if (lane.congestion_level === 'CRITICAL') congestionScore = Math.max(congestionScore, 90);
+            else if (lane.congestion_level === 'HIGH') congestionScore = Math.max(congestionScore, 75);
+            else if (lane.congestion_level === 'MEDIUM') congestionScore = Math.max(congestionScore, 50);
+          });
+        }
 
-        // Rotate signal statuses randomly
-        const statusOptions = ['green', 'red', 'yellow'];
-        const newSignals = state.signals.map((sig) => ({
-          ...sig,
-          timer: Math.max(1, sig.timer + Math.floor(Math.random() * 7) - 3),
-          status:
-            Math.random() < 0.15
-              ? statusOptions[Math.floor(Math.random() * 3)]
-              : sig.status,
-        }));
+        const avgPressure = laneCount > 0 ? (totalPressure / laneCount) : 0;
+        const avgSpeed = Math.max(5, Math.floor(60 - (avgPressure * 30))); // Sync mapped logical speed
 
-        // Push new point to trend chart (keep last 12 points)
         const now = new Date();
         const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const newTrend = [
-          ...state.trafficTrend.slice(-11),
-          { time: timeStr, vehicles: Math.floor(Math.random() * 600) + 200 },
-        ];
 
-        return {
-          stats: {
-            ...state.stats,
-            totalVehicles: newVehicles,
-            avgSpeed: newSpeed,
-            congestionLevel: newCongestion,
-          },
-          signals: newSignals,
-          trafficTrend: newTrend,
-        };
-      });
-    }, 3000);
+        set((state) => {
+          if (!state.stats) return state;
+
+          const newTrend = [
+            ...state.trafficTrend.slice(-11),
+            { time: timeStr, vehicles: totalVehicles },
+          ];
+
+          return {
+            stats: {
+              ...state.stats,
+              totalVehicles: totalVehicles,
+              avgSpeed: avgSpeed,
+              congestionLevel: congestionScore,
+            },
+            trafficTrend: newTrend,
+          };
+        });
+      } catch (err) {
+        console.error("Live Simulation API sync error:", err);
+      }
+    }, 2000);
 
     set({ _intervalId: id });
   },

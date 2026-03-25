@@ -95,23 +95,16 @@ class LaneManager:
         if not isinstance(lanes, list) or len(lanes) < 1:
             return False
 
-        # Update global lane config to match calibration file
-        loaded_names: list[str] = [str(l.get("name", "")) for l in lanes]
-        if any(not n for n in loaded_names):
-            return False
-
-        config.LANE_COUNT = len(loaded_names)
-        config.LANE_NAMES = loaded_names
-        self.lane_names = list(config.LANE_NAMES)
-        self.lane_count = config.LANE_COUNT
-
         polys: dict[str, np.ndarray] = {}
         areas: dict[str, float] = {}
         centroid_x: dict[str, float] = {}
         centroid_y: dict[str, float] = {}
 
-        for idx, lane_entry in enumerate(lanes):
-            name = loaded_names[idx]
+        for lane_entry in lanes:
+            name = str(lane_entry.get("name", ""))
+            if not name:
+                continue
+
             pts = lane_entry.get("polygon", [])
             if not isinstance(pts, list) or len(pts) < 3:
                 continue
@@ -131,6 +124,16 @@ class LaneManager:
             else:
                 centroid_x[name] = float(np.mean(poly[:, 0]))
                 centroid_y[name] = float(np.mean(poly[:, 1]))
+
+        if not polys:
+            return False
+
+        # Update global lane config to match ONLY valid polygons
+        loaded_names = list(polys.keys())
+        config.LANE_COUNT = len(loaded_names)
+        config.LANE_NAMES = loaded_names
+        self.lane_names = list(config.LANE_NAMES)
+        self.lane_count = config.LANE_COUNT
 
         self._polygons = polys
         self._areas = areas
@@ -273,4 +276,3 @@ class LaneManager:
 
     def get_signal_states(self, active_lane: str) -> dict:
         return {name: "green" if name == active_lane else "red" for name in self.lane_names}
-
