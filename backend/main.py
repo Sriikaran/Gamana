@@ -29,7 +29,7 @@ from modules.predictor import CongestionPredictor
 from modules.video_renderer import VideoRenderer
 from modules.behaviour_detector import BehaviourDetector
 from modules.risk_predictor import RiskPredictor
-from backend.server import run_server, update_state
+from server import run_server, update_state
 
 
 def _make_pipeline():

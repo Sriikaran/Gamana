@@ -26,8 +26,8 @@ from flask import Flask, Response, jsonify, render_template, request
 from flask_cors import CORS
 
 _HERE         = os.path.dirname(os.path.abspath(__file__))
-_TEMPLATE_DIR = os.path.normpath(os.path.join(_HERE, "..", "templates"))
-_STATIC_DIR   = os.path.normpath(os.path.join(_HERE, "..", "static"))
+_TEMPLATE_DIR = os.path.normpath(os.path.join(_HERE, "..", "frontend", "flask_assets", "templates"))
+_STATIC_DIR   = os.path.normpath(os.path.join(_HERE, "..", "frontend", "flask_assets", "static"))
 
 app = Flask(
     __name__,
