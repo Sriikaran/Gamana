@@ -1,4 +1,4 @@
-# Gamana (Pragati AI Smart Traffic System)
+# Gamana ( AI Smart Traffic System )
 
 Welcome to **Gamana** (Pragati AI), a highly intelligent, real-time traffic management system. The core objective of Gamana is to eliminate the inefficiencies of traditional, static traffic light timers. By utilizing advanced computer vision and predictive analytics, Gamana dynamically adapts traffic signals based on actual vehicular density, lane pressure, and observed congestion in real-time.
 
