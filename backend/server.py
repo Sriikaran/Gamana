@@ -59,6 +59,7 @@ _state: Dict[str, Any] = {
     "video_source":    "",
     "lane_count":      4,
     "lane_names":      [],
+    "ai_recommendation": {"status": "fallback"},   # Phase 2: Featherless advisory
 }
 
 # ── Update function (called every frame from main loop) ───────────────────────
@@ -120,6 +121,16 @@ def update_state(
             _state["policy_breakdown"] = policy_breakdown
         if prediction_data is not None:
             _state["prediction_data"] = prediction_data
+
+
+def update_ai_state(ai_recommendation_dict: dict) -> None:
+    """
+    Thread-safe update for the Featherless AI recommendation.
+    Called from main.py whenever the FeatherlessRunner produces a new result.
+    Completely separate from update_state() — no existing call sites change.
+    """
+    with _lock:
+        _state["ai_recommendation"] = ai_recommendation_dict
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -283,6 +294,48 @@ def api_sample_videos():
 
 
 # ── Start server ──────────────────────────────────────────────────────────────
+
+_ai_runner_ref = None
+
+def set_ai_runner(runner) -> None:
+    """Inject the FeatherlessRunner instance so we can compute dynamic metadata."""
+    global _ai_runner_ref
+    _ai_runner_ref = runner
+
+@app.route("/api/ai_recommendation")
+def api_ai_recommendation():
+    """
+    GET /api/ai_recommendation
+    ──────────────────────────
+    Returns the latest Featherless AI advisory recommendation.
+    This is ADVISORY only — the signal controller is not affected.
+
+    Response schema:
+    {
+        "recommended_lane":  str,
+        "green_duration":    int,
+        "confidence":        float,
+        "reasoning":         [str, ...],
+        "future_prediction": str,
+        "priority_factors":  [str, ...],
+        "status":            "ok" | "fallback",
+        ... dynamic metadata fields
+    }
+    """
+    with _lock:
+        rec_dict = _state.get("ai_recommendation", {"status": "fallback"}).copy()
+    
+    # Dynamically inject runtime metadata if runner is available
+    if _ai_runner_ref is not None:
+        rec_dict["processing"] = getattr(_ai_runner_ref, "_processing", False)
+        if rec_dict.get("status") != "fallback" and rec_dict.get("response_timestamp"):
+            rec_dict["recommendation_age_s"] = round(time.time() - rec_dict["response_timestamp"], 1)
+            rec_dict["queue_status"] = "healthy" if rec_dict["recommendation_age_s"] < 20.0 else "stale"
+        else:
+            rec_dict["recommendation_age_s"] = 0.0
+            rec_dict["queue_status"] = "offline" if rec_dict.get("status") == "fallback" else "healthy"
+
+    return jsonify(rec_dict)
 
 def run_server(host: str = "0.0.0.0", port: int = 5000) -> None:
     """Start Flask in a background daemon thread."""

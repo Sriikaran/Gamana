@@ -33,3 +33,7 @@ output/
 
 # Ultralytics datasets
 datasets/
+
+# Environment Variables
+.env
+.env.*

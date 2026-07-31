@@ -29,7 +29,14 @@ from modules.predictor import CongestionPredictor
 from modules.video_renderer import VideoRenderer
 from modules.behaviour_detector import BehaviourDetector
 from modules.risk_predictor import RiskPredictor
-from server import run_server, update_state
+from server import run_server, update_state, update_ai_state
+# ── Phase 2: Featherless AI advisory layer (non-breaking) ────────────────────
+try:
+    from services.featherless_runner import FeatherlessRunner, AI_EVERY_N_FRAMES
+    _featherless_available = True
+except Exception as _fe_import_err:
+    print(f"[Main] Featherless import skipped: {_fe_import_err}")
+    _featherless_available = False
 
 
 def _make_pipeline():
@@ -129,6 +136,19 @@ def main() -> None:
     print(f"[Main] Source FPS: {source_fps:.1f} | Realtime mode: {getattr(config, 'REALTIME_MODE', False)}")
 
     run_server(host=FLASK_HOST, port=args.port)
+
+    # ── Featherless AI runner — started once, runs in background daemon thread
+    _ai_runner = None
+    if _featherless_available:
+        try:
+            _ai_runner = FeatherlessRunner()
+            _ai_runner.start()   # no-op if API key missing; Gamana runs normally
+            
+            import server
+            server.set_ai_runner(_ai_runner)
+        except Exception as _fe_start_err:
+            print(f"[Main] Featherless runner start skipped: {_fe_start_err}")
+            _ai_runner = None
 
     fps = 0.0
     frame_count = 0
@@ -296,6 +316,25 @@ def main() -> None:
 
         risk_pred.add_events(behaviour_events)
         risks = risk_pred.compute_risks()
+
+        # ── Featherless AI: non-blocking snapshot submission ───────────────────
+        # Runs every AI_EVERY_N_FRAMES (default 90) so ~1 AI call per 3 s at 30 fps.
+        # submit_snapshot() is a queue.put_nowait() — microsecond cost, no FPS impact.
+        if _ai_runner is not None and frame_count % AI_EVERY_N_FRAMES == 0:
+            try:
+                _ai_runner.submit_snapshot(
+                    lane_stats          = lane_stats,
+                    signal_status       = signal_status,
+                    behaviour_events    = behaviour_events,
+                    predicted_pressures = predicted_pressures,
+                    frame_count         = frame_count,
+                )
+                # Push the runner's LATEST completed recommendation to _state
+                # so /api/ai_recommendation always serves a fresh result.
+                _rec = _ai_runner.get_last_recommendation()
+                update_ai_state(_rec.to_dict())
+            except Exception:
+                pass  # never propagate into the video pipeline
 
         annotated = renderer.render(
             frame, detections, lane_polys,
